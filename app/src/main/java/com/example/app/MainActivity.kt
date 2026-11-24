@@ -112,7 +112,16 @@ private fun WarehouseApp() {
         onResult = { uri ->
             pickedUri = uri
             if (uri != null) {
-                selectedFile = uri.lastPathSegment ?: "ملف Excel محدد"
+                // بعض مزوّدي الملفات يعيدون Uri بلا اسم ملف أو بلا صلاحية دائمة.
+                // لا نسمح لفشل هذه الخطوة بإسقاط التطبيق.
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+                selectedFile = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                    ?: "ملف Excel محدد"
                 scope.launch {
                     isReading = true
                     try {
