@@ -232,7 +232,12 @@ private fun WarehouseApp() {
                         ReportsHeader(
                             mode = selectedMode,
                             filteredCount = filteredInvoices.size,
-                            onExportExcel = { shareXlsx(context, reportRows, "تقرير حركة المندوبين", selectedMode, retailRows(orderedInvoices, aliases)) },
+                            onExportExcel = {
+                                val exports = reportGroups.map { (person, personInvoices) ->
+                                    ExportReport(person, invoiceRows(personInvoices, aliases), retailRows(personInvoices, aliases))
+                                }.ifEmpty { listOf(ExportReport("كل المندوبين", reportRows, retailRows(orderedInvoices, aliases))) }
+                                shareXlsx(context, exports, "تقرير حركة المندوبين", selectedMode)
+                            },
                         )
                     }
                     if (reportGroups.isEmpty()) {
@@ -309,14 +314,24 @@ private fun WarehouseApp() {
     }
 }
 
-private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<ReportRow> = invoices.take(60).map { invoice ->
-    val materialAlias = aliases[invoice.itemCode]?.takeIf { it.isNotBlank() } ?: invoice.defaultAlias()
-    when (invoice.movementKind()) {
-        MovementKind.TRANSFER_INPUT -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, invoice.quantity.toInt(), 0, 0)
-        MovementKind.TRANSFER_OUTPUT -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, invoice.quantity.toInt(), 0)
-        MovementKind.SALE -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, invoice.quantity.toInt())
-        MovementKind.UNKNOWN -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, 0)
-    }
+private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<ReportRow> {
+    data class Key(val date: String, val code: String, val material: String, val unit: String)
+    return invoices
+        .groupBy { invoice ->
+            Key(reportDate(invoice.date), invoice.itemCode, aliases[invoice.itemCode]?.takeIf(String::isNotBlank) ?: invoice.defaultAlias(), invoice.unit.trim())
+        }
+        .map { (key, movements) ->
+            ReportRow(
+                date = key.date,
+                material = key.material,
+                unit = key.unit,
+                loading = movements.filter { it.movementKind() == MovementKind.TRANSFER_INPUT }.sumOf { it.quantity.toInt() },
+                returned = movements.filter { it.movementKind() == MovementKind.TRANSFER_OUTPUT }.sumOf { it.quantity.toInt() },
+                sale = movements.filter { it.movementKind() == MovementKind.SALE }.sumOf { it.quantity.toInt() },
+            )
+        }
+        .sortedWith(compareBy({ it.date }, { it.material }, { it.unit }))
+        .take(60)
 }
 
 private fun retailRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<RetailReportRow> {
@@ -328,13 +343,15 @@ private fun retailRows(invoices: List<Invoice>, aliases: Map<String, String> = e
             RetailReportRow(
                 date = key.date,
                 material = key.material,
-                carton = movements.filter { it.unit.contains("طرد") }.sumOf { it.quantity.toInt() },
-                box = movements.filter { it.unit.contains("علب") || it.unit.contains("علبة") }.sumOf { it.quantity.toInt() },
+                carton = movements.filter { normalizedUnit(it.unit).contains("طرد") }.sumOf { it.quantity.toInt() },
+                box = movements.filter { normalizedUnit(it.unit).contains("علب") || normalizedUnit(it.unit).contains("علبه") }.sumOf { it.quantity.toInt() },
             )
         }
         .sortedWith(compareBy({ it.date }, { it.material }))
         .take(60)
 }
+
+private fun normalizedUnit(value: String): String = value.replace(Regex("\\s+"), "").trim()
 
 private fun reportDate(epochMillis: Long): String =
     SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(epochMillis))

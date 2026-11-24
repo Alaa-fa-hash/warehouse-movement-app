@@ -6,6 +6,12 @@ import androidx.core.content.FileProvider
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 
+internal data class ExportReport(
+    val salesperson: String,
+    val rows: List<ReportRow>,
+    val retailRows: List<RetailReportRow>,
+)
+
 internal fun sharePngReport(context: Context, salesperson: String, rows: List<ReportRow>) {
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "report-${salesperson.hashCode()}.png")
@@ -15,42 +21,44 @@ internal fun sharePngReport(context: Context, salesperson: String, rows: List<Re
 
 internal fun shareXlsx(
     context: Context,
-    rows: List<ReportRow>,
+    reports: List<ExportReport>,
     title: String,
     mode: String = "جملة",
-    retailRows: List<RetailReportRow> = emptyList(),
 ) {
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
-        val sheet = workbook.createSheet("التقرير")
         val headerStyle = workbook.createCellStyle().apply {
             fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.TEAL.index
             setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND)
             setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER)
         }
-        val header = sheet.createRow(0)
         val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
-        headings.forEachIndexed { i, value ->
-            header.createCell(i).apply { setCellValue(value); cellStyle = headerStyle }
-        }
-        if (mode == "مفرق") {
-            retailRows.forEachIndexed { rowIndex, row ->
-                val r = sheet.createRow(rowIndex + 1)
-                listOf(row.date, row.material).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
-                r.createCell(2).setCellValue(row.carton.toDouble())
-                r.createCell(3).setCellValue(row.box.toDouble())
+        reports.forEachIndexed { reportIndex, report ->
+            val baseName = report.salesperson.ifBlank { "مندوب" }.replace(Regex("[\\\\/?*\\[\\]:]"), "").take(28).ifBlank { "مندوب" }
+            val sheet = workbook.createSheet("${baseName}_${reportIndex + 1}".take(31))
+            val header = sheet.createRow(0)
+            headings.forEachIndexed { i, value ->
+                header.createCell(i).apply { setCellValue(value); cellStyle = headerStyle }
             }
-        } else {
-            rows.forEachIndexed { rowIndex, row ->
-                val r = sheet.createRow(rowIndex + 1)
-                listOf(row.date, row.material, row.unit).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
-                r.createCell(3).setCellValue(row.loading.toDouble())
-                r.createCell(4).setCellValue(row.returned.toDouble())
-                r.createCell(5).setCellValue(row.sale.toDouble())
+            if (mode == "مفرق") {
+                report.retailRows.forEachIndexed { rowIndex, row ->
+                    val r = sheet.createRow(rowIndex + 1)
+                    listOf(row.date, row.material).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
+                    r.createCell(2).setCellValue(row.carton.toDouble())
+                    r.createCell(3).setCellValue(row.box.toDouble())
+                }
+            } else {
+                report.rows.forEachIndexed { rowIndex, row ->
+                    val r = sheet.createRow(rowIndex + 1)
+                    listOf(row.date, row.material, row.unit).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
+                    r.createCell(3).setCellValue(row.loading.toDouble())
+                    r.createCell(4).setCellValue(row.returned.toDouble())
+                    r.createCell(5).setCellValue(row.sale.toDouble())
+                }
             }
+            for (i in headings.indices) sheet.autoSizeColumn(i)
         }
-        for (i in headings.indices) sheet.autoSizeColumn(i)
         file.outputStream().use { workbook.write(it) }
     }
     shareFile(context, file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", title)
