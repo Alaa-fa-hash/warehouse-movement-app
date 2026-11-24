@@ -174,12 +174,24 @@ private fun WarehouseApp() {
                             onExport = { },
                             isReading = isReading,
                         )
-                        FileCard(fileName = selectedFile, hasFile = pickedUri != null)
+                        FileCard(
+                            fileName = selectedFile,
+                            hasFile = pickedUri != null,
+                            movementCount = invoices.size,
+                            materialCount = invoices.map { it.itemCode }.filter(String::isNotBlank).distinct().size,
+                            salespersonCount = salespeople.size,
+                        )
                         Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it }, salespeople = salespeople, selectedSalesperson = selectedSalesperson, onSalespersonChange = { selectedSalesperson = it })
                         PriorityMaterials()
                         ReportsHeader(mode = selectedMode, filteredCount = filteredInvoices.size)
                     }
-                    item { ReportCard(mode = selectedMode, rows = invoiceRows(filteredInvoices).ifEmpty { demoRows }) }
+                    item {
+                        ReportCard(
+                            mode = selectedMode,
+                            salespersonName = selectedSalesperson ?: "كل المندوبين",
+                            rows = invoiceRows(filteredInvoices).ifEmpty { demoRows },
+                        )
+                    }
                     item {
                         Text(
                             text = "الإصدار الأول — محرك قراءة Excel الكامل قيد الإكمال داخل النسخة Native.",
@@ -247,7 +259,13 @@ private fun ActionRow(onPickFile: () -> Unit, onExport: () -> Unit, isReading: B
 }
 
 @Composable
-private fun FileCard(fileName: String, hasFile: Boolean) {
+private fun FileCard(
+    fileName: String,
+    hasFile: Boolean,
+    movementCount: Int,
+    materialCount: Int,
+    salespersonCount: Int,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = PaleBlue),
@@ -257,9 +275,9 @@ private fun FileCard(fileName: String, hasFile: Boolean) {
         Row(Modifier.fillMaxWidth().padding(18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(horizontalAlignment = Alignment.Start) {
                 Text(if (hasFile) "تم اختيار الملف" else "الملف الحالي", color = Color(0xFF687782), fontSize = 12.sp)
-                Text("8 حركة", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text("6 مادة", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text("2 مندوب", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("$movementCount حركة", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("$materialCount مادة", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("$salespersonCount مندوب", color = Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.End) {
                 Text(fileName, color = Navy, fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
@@ -356,7 +374,7 @@ private fun ReportsHeader(mode: String, filteredCount: Int) {
 }
 
 @Composable
-private fun ReportCard(mode: String, rows: List<ReportRow>) {
+private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportRow>) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -365,7 +383,7 @@ private fun ReportCard(mode: String, rows: List<ReportRow>) {
     ) {
         Column {
             Column(Modifier.fillMaxWidth().background(PaleBlue).padding(22.dp), horizontalAlignment = Alignment.End) {
-                Text("بهجت نقاوة", color = Navy, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text(salespersonName, color = Navy, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                 Text("مبيعات $mode", color = Color(0xFF687782), fontSize = 15.sp)
                 Text("2026-11-23 إلى 2026-11-23", color = Color(0xFF687782), fontSize = 14.sp)
             }
