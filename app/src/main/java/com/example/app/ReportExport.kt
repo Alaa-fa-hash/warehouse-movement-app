@@ -7,6 +7,7 @@ import org.apache.poi.ss.usermodel.BorderStyle
 import org.apache.poi.ss.usermodel.FillPatternType
 import org.apache.poi.ss.usermodel.HorizontalAlignment
 import org.apache.poi.ss.usermodel.IndexedColors
+import org.apache.poi.xssf.usermodel.XSSFCellStyle
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 
@@ -53,7 +54,7 @@ internal fun shareXlsx(
         }
         headerStyle.setFont(headerFont)
 
-        fun bodyStyle(alternate: Boolean): org.apache.poi.ss.usermodel.CellStyle = workbook.createCellStyle().apply {
+        fun bodyStyle(alternate: Boolean): XSSFCellStyle = workbook.createCellStyle().apply {
             if (alternate) {
                 fillForegroundColor = IndexedColors.PALE_BLUE.index
                 setFillPattern(FillPatternType.SOLID_FOREGROUND)
