@@ -60,6 +60,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.example.app.excel.ExcelReader
 import com.example.app.excel.Invoice
 import com.example.app.excel.MovementKind
@@ -210,12 +213,15 @@ private fun WarehouseApp() {
 
 private fun invoiceRows(invoices: List<Invoice>): List<ReportRow> = invoices.take(60).map { invoice ->
     when (invoice.movementKind()) {
-        MovementKind.TRANSFER_INPUT -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, invoice.quantity.toInt(), 0, 0)
-        MovementKind.TRANSFER_OUTPUT -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, invoice.quantity.toInt(), 0)
-        MovementKind.SALE -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, 0, invoice.quantity.toInt())
-        MovementKind.UNKNOWN -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, 0, 0)
+        MovementKind.TRANSFER_INPUT -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, invoice.quantity.toInt(), 0, 0)
+        MovementKind.TRANSFER_OUTPUT -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, invoice.quantity.toInt(), 0)
+        MovementKind.SALE -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, 0, invoice.quantity.toInt())
+        MovementKind.UNKNOWN -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, 0, 0)
     }
 }
+
+private fun reportDate(epochMillis: Long): String =
+    SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(epochMillis))
 
 @Composable
 private fun Header() {
