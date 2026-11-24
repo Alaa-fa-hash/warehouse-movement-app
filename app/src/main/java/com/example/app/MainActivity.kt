@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.res.ResourcesCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -630,42 +631,67 @@ internal fun writePng(
     rows: List<ReportRow>,
     mode: String = "جملة",
     retailRows: List<RetailReportRow> = emptyList(),
+    salesperson: String = "",
 ) {
-    val width = 1400
-    val rowHeight = 58
-    val headerHeight = 150
+    val width = context.resources.displayMetrics.widthPixels.coerceAtLeast(720)
+    val scale = width / 1080f
+    val rowHeight = (74 * scale).toInt()
+    val headerHeight = (310 * scale).toInt()
+    val summaryHeight = (105 * scale).toInt()
+    val tableHeaderHeight = (70 * scale).toInt()
+    val footerHeight = (70 * scale).toInt()
     val rowCount = if (mode == "مفرق") retailRows.size else rows.size
-    val bitmap = Bitmap.createBitmap(width, headerHeight + (rowCount + 1) * rowHeight + 40, Bitmap.Config.ARGB_8888)
+    val totalHeight = headerHeight + summaryHeight + tableHeaderHeight + (rowCount + 1) * rowHeight + footerHeight + (55 * scale).toInt()
+    val bitmap = Bitmap.createBitmap(width, totalHeight, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(android.graphics.Color.rgb(247, 243, 234))
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(16, 40, 61); textSize = 28f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.RIGHT }
-    canvas.drawText("تقرير حركة مستودع المندوبين", width - 40f, 55f, paint)
-    paint.textSize = 20f
-    paint.typeface = Typeface.DEFAULT
-    canvas.drawText("تصدير التقرير — ${rows.size} حركة", width - 40f, 95f, paint)
+    val navy = android.graphics.Color.rgb(16, 40, 61)
+    val teal = android.graphics.Color.rgb(15, 153, 168)
+    val pale = android.graphics.Color.rgb(237, 248, 249)
+    val rowAlt = android.graphics.Color.rgb(244, 250, 250)
+    val totalColor = android.graphics.Color.rgb(222, 242, 245)
+    canvas.drawColor(android.graphics.Color.WHITE)
+    val cairoBold = ResourcesCompat.getFont(context, R.font.cairo_bold) ?: Typeface.DEFAULT_BOLD
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = cairoBold; textAlign = Paint.Align.CENTER }
+    fun text(value: String, x: Float, y: Float, size: Float, color: Int = navy, align: Paint.Align = Paint.Align.CENTER) {
+        paint.textSize = size * scale
+        paint.color = color
+        paint.textAlign = align
+        paint.typeface = cairoBold
+        canvas.drawText(value, x, y, paint)
+    }
+    canvas.drawRect(0f, 0f, width.toFloat(), headerHeight.toFloat(), paint.apply { color = pale })
+    text(salesperson.ifBlank { if (mode == "مفرق") "مبيعات مفرق" else "حركة جملة" }, width - 48f * scale, 102f * scale, 34f, navy, Paint.Align.RIGHT)
+    text("التاريخ: ${rows.firstOrNull()?.date ?: retailRows.firstOrNull()?.date ?: ""}", width - 48f * scale, 178f * scale, 26f, android.graphics.Color.rgb(104, 119, 130), Paint.Align.RIGHT)
 
-    val headers = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
-    val values = if (mode == "مفرق") {
-        retailRows.map { listOf(it.date, it.material, it.carton.toString(), it.box.toString()) }
+    var y = headerHeight
+    canvas.drawRect(0f, y.toFloat(), width.toFloat(), (y + summaryHeight).toFloat(), paint.apply { color = android.graphics.Color.WHITE })
+    if (mode == "مفرق") {
+        text("المبيع: ${retailRows.sumOf { it.carton + it.box }}", width / 2f, y + summaryHeight * .62f, 27f, android.graphics.Color.rgb(46, 125, 80))
     } else {
-        rows.map { listOf(it.date, it.material, it.unit, it.loading.toString(), it.returned.toString(), it.sale.toString()) }
+        val summary = listOf("الإدخالات: ${rows.sumOf { it.loading }}", "الإخراجات: ${rows.sumOf { it.returned }}", "المبيع: ${rows.sumOf { it.sale }}")
+        summary.forEachIndexed { index, value -> text(value, width - (150 + index * 380) * scale, y + summaryHeight * .62f, 24f, if (index == 2) android.graphics.Color.rgb(46, 125, 80) else navy) }
+    }
+    y += summaryHeight
+    val headers = if (mode == "مفرق") listOf("علبة", "طرد", "المادة", "التاريخ") else listOf("مبيع", "مرتجع", "تحميل", "الوحدة", "المادة", "التاريخ")
+    val values = if (mode == "مفرق") {
+        retailRows.map { listOf(it.box.toString(), it.carton.toString(), it.material, it.date) }
+    } else {
+        rows.map { listOf(it.sale.toString(), it.returned.toString(), it.loading.toString(), it.unit, it.material, it.date) }
     }
     val columnWidth = width / headers.size.toFloat()
-    val top = headerHeight.toFloat()
-    paint.textSize = 20f
-    paint.typeface = Typeface.DEFAULT_BOLD
-    paint.color = android.graphics.Color.WHITE
-    paint.textAlign = Paint.Align.CENTER
-    canvas.drawRect(0f, top, width.toFloat(), top + rowHeight, paint.apply { color = android.graphics.Color.rgb(17, 150, 167) })
-    headers.forEachIndexed { index, header -> canvas.drawText(header, index * columnWidth + columnWidth / 2, top + 37f, paint.apply { color = android.graphics.Color.WHITE }) }
-    paint.typeface = Typeface.DEFAULT
+    canvas.drawRect(0f, y.toFloat(), width.toFloat(), (y + tableHeaderHeight).toFloat(), paint.apply { color = teal })
+    headers.forEachIndexed { index, header -> text(header, index * columnWidth + columnWidth / 2, y + tableHeaderHeight * .65f, 21f, android.graphics.Color.WHITE) }
+    y += tableHeaderHeight
     values.forEachIndexed { rowIndex, row ->
-        val y = top + rowHeight * (rowIndex + 1)
-        paint.color = if (rowIndex % 2 == 0) android.graphics.Color.WHITE else android.graphics.Color.rgb(238, 247, 248)
-        canvas.drawRect(0f, y, width.toFloat(), y + rowHeight, paint)
-        paint.color = android.graphics.Color.rgb(16, 40, 61)
-        row.forEachIndexed { index, value -> canvas.drawText(value, index * columnWidth + columnWidth / 2, y + 37f, paint) }
+        canvas.drawRect(0f, y.toFloat(), width.toFloat(), (y + rowHeight).toFloat(), paint.apply { color = if (rowIndex % 2 == 0) android.graphics.Color.WHITE else rowAlt })
+        row.forEachIndexed { index, value -> text(value, index * columnWidth + columnWidth / 2, y + rowHeight * .64f, 20f, if (mode == "جملة" && index == 0) android.graphics.Color.rgb(46, 125, 80) else navy) }
+        y += rowHeight
     }
+    val totals = if (mode == "مفرق") listOf("${retailRows.sumOf { it.box }}", "${retailRows.sumOf { it.carton }}", "الإجمالي", "") else listOf("${rows.sumOf { it.sale }}", "${rows.sumOf { it.returned }}", "${rows.sumOf { it.loading }}", "", "الإجمالي", "")
+    canvas.drawRect(0f, y.toFloat(), width.toFloat(), (y + rowHeight).toFloat(), paint.apply { color = totalColor })
+    totals.forEachIndexed { index, value -> text(value, index * columnWidth + columnWidth / 2, y + rowHeight * .64f, 21f, if (index < 2) android.graphics.Color.rgb(46, 125, 80) else navy) }
+    y += rowHeight
+    text("تقرير حركة المندوب — نموذج تصدير PNG", width / 2f, y + footerHeight * .65f, 18f, android.graphics.Color.rgb(104, 119, 130))
     val output = if (uri.scheme == "file") java.io.FileOutputStream(uri.path ?: error("مسار PNG غير صالح")) else context.contentResolver.openOutputStream(uri)
     output?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         ?: error("تعذر إنشاء صورة PNG")

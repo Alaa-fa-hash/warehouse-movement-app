@@ -157,8 +157,16 @@ class ExcelReader(private val contentResolver: ContentResolver) {
             val normalizedHeaders = headers.mapIndexed { index, header ->
                 SchemaValidator.normalizeHeader(header) to index
             }.toMap()
-            if (FLAT_REQUIRED.all { normalizedHeaders.containsKey(SchemaValidator.normalizeHeader(it)) }) {
-                flatColumns = normalizedHeaders
+            val detectedFlatColumns = FLAT_HEADER_ALIASES.mapValues { (_, aliases) ->
+                aliases.asSequence()
+                    .map { SchemaValidator.normalizeHeader(it) }
+                    .mapNotNull { normalizedHeaders[it] }
+                    .firstOrNull()
+            }
+            if (detectedFlatColumns.values.all { it != null }) {
+                flatColumns = detectedFlatColumns
+                    .mapKeys { SchemaValidator.normalizeHeader(it.key) }
+                    .mapValues { it.value!! }
                 break
             }
             when (val result = SchemaValidator.validate(headers)) {
@@ -246,6 +254,14 @@ class ExcelReader(private val contentResolver: ContentResolver) {
 
     companion object {
         private val ITEM_HEADER = Regex("^\\s*(\\d+)\\s*[-–—]\\s*(.+?)\\s*$")
-        private val FLAT_REQUIRED = listOf("التاريخ", "رمز المادة", "اسم المادة", "الكمية", "الوحدة", "نوع الفاتورة", "المستودع")
+        private val FLAT_HEADER_ALIASES = linkedMapOf(
+            "التاريخ" to listOf("التاريخ", "date"),
+            "رمز المادة" to listOf("رمز المادة", "كود المادة", "item code"),
+            "اسم المادة" to listOf("اسم المادة", "المادة", "item name"),
+            "الكمية" to listOf("الكمية", "quantity"),
+            "الوحدة" to listOf("الوحدة", "وحدة المادة", "unit"),
+            "نوع الفاتورة" to listOf("نوع الفاتورة", "نوع الحركة", "invoice type"),
+            "المستودع" to listOf("المستودع", "مستودع القلم", "البائع", "warehouse"),
+        )
     }
 }

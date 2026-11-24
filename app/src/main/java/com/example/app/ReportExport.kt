@@ -21,7 +21,7 @@ internal fun sharePngReport(
 ) {
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "report-${salesperson.hashCode()}.png")
-    writePng(context, android.net.Uri.fromFile(file), rows, mode, retailRows)
+    writePng(context, android.net.Uri.fromFile(file), rows, mode, retailRows, salesperson)
     shareFile(context, file, "image/png", "تقرير $salesperson")
 }
 
