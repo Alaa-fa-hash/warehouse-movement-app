@@ -210,7 +210,7 @@ private fun WarehouseApp() {
     val priorityOrder = priorityCodes.withIndex().associate { it.value to it.index }
     val orderedInvoices = filteredInvoices.sortedWith(compareBy({ priorityOrder[it.itemCode] ?: 1000 }, { it.itemName }, { it.unit }))
     val reportGroups = orderedInvoices.groupBy { it.salesperson.ifBlank { "غير محدد" } }
-    val reportRows = invoiceRows(orderedInvoices, aliases).ifEmpty { demoRows }
+    val reportRows = invoiceRows(orderedInvoices, aliases, priorityOrder).ifEmpty { demoRows }
 
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
@@ -263,8 +263,8 @@ private fun WarehouseApp() {
                             filteredCount = filteredInvoices.size,
                             onExportExcel = {
                                 val exports = reportGroups.map { (person, personInvoices) ->
-                                    ExportReport(person, invoiceRows(personInvoices, aliases), retailRows(personInvoices, aliases))
-                                }.ifEmpty { listOf(ExportReport("كل المندوبين", reportRows, retailRows(orderedInvoices, aliases))) }
+                                    ExportReport(person, invoiceRows(personInvoices, aliases, priorityOrder), retailRows(personInvoices, aliases, priorityOrder))
+                                }.ifEmpty { listOf(ExportReport("كل المندوبين", reportRows, retailRows(orderedInvoices, aliases, priorityOrder))) }
                                 shareXlsx(context, exports, "تقرير حركة المندوبين", selectedMode)
                             },
                         )
@@ -275,20 +275,20 @@ private fun WarehouseApp() {
                                 mode = selectedMode,
                                 salespersonName = "كل المندوبين",
                                 rows = reportRows,
-                                retailRows = retailRows(orderedInvoices, aliases),
+                                retailRows = retailRows(orderedInvoices, aliases, priorityOrder),
                                 onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") },
                             )
                         }
                     } else {
                         reportGroups.forEach { (person, personInvoices) ->
                             item {
-                                val personRows = invoiceRows(personInvoices, aliases).ifEmpty { demoRows }
+                                val personRows = invoiceRows(personInvoices, aliases, priorityOrder).ifEmpty { demoRows }
                                 ReportCard(
                                     mode = selectedMode,
                                     salespersonName = person,
                                     rows = personRows,
-                                    retailRows = retailRows(personInvoices, aliases),
-                                    onExportPng = { sharePngReport(context, person, personRows, selectedMode, retailRows(personInvoices, aliases)) },
+                                    retailRows = retailRows(personInvoices, aliases, priorityOrder),
+                                    onExportPng = { sharePngReport(context, person, personRows, selectedMode, retailRows(personInvoices, aliases, priorityOrder)) },
                                 )
                             }
                         }
@@ -349,7 +349,11 @@ private fun WarehouseApp() {
     }
 }
 
-private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<ReportRow> {
+private fun invoiceRows(
+    invoices: List<Invoice>,
+    aliases: Map<String, String> = emptyMap(),
+    priorityOrder: Map<String, Int> = emptyMap(),
+): List<ReportRow> {
     data class Key(val date: String, val code: String, val material: String, val unit: String)
     return invoices
         .groupBy { invoice ->
@@ -358,7 +362,7 @@ private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = 
         .map { (key, movements) ->
             val loading = movements.filter { it.movementKind() == MovementKind.TRANSFER_INPUT }.sumOf { it.quantity.toInt() }
             val returned = movements.filter { it.movementKind() == MovementKind.TRANSFER_OUTPUT }.sumOf { it.quantity.toInt() }
-            ReportRow(
+            key to ReportRow(
                 date = key.date,
                 material = key.material,
                 unit = key.unit,
@@ -367,15 +371,20 @@ private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = 
                 sale = loading - returned,
             )
         }
-        .sortedWith(compareBy({ it.date }, { it.material }, { it.unit }))
+        .sortedWith(compareBy({ priorityOrder[it.first.code] ?: 1000 }, { it.second.date }, { it.second.material }, { it.second.unit }))
+        .map { it.second }
         .take(60)
 }
 
-private fun retailRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<RetailReportRow> {
-    data class Key(val date: String, val material: String)
+private fun retailRows(
+    invoices: List<Invoice>,
+    aliases: Map<String, String> = emptyMap(),
+    priorityOrder: Map<String, Int> = emptyMap(),
+): List<RetailReportRow> {
+    data class Key(val date: String, val code: String, val material: String)
     return invoices
         .filter { it.movementKind() == MovementKind.SALE }
-        .groupBy { Key(reportDate(it.date), aliases[it.itemCode]?.takeIf(String::isNotBlank) ?: it.defaultAlias()) }
+        .groupBy { Key(reportDate(it.date), it.itemCode, aliases[it.itemCode]?.takeIf(String::isNotBlank) ?: it.defaultAlias()) }
         .map { (key, movements) ->
             RetailReportRow(
                 date = key.date,
@@ -384,7 +393,6 @@ private fun retailRows(invoices: List<Invoice>, aliases: Map<String, String> = e
                 box = movements.filter { normalizedUnit(it.unit).contains("علب") || normalizedUnit(it.unit).contains("علبه") }.sumOf { it.quantity.toInt() },
             )
         }
-        .sortedWith(compareBy({ it.date }, { it.material }))
         .take(60)
 }
 
@@ -671,9 +679,8 @@ internal fun writePng(
     val summaryHeight = 58f
     val tableHeaderHeight = 38f
     val rowHeight = 42f
-    val footerHeight = 38f
     val rowCount = if (mode == "مفرق") retailRows.size else rows.size
-    val height = ((headerHeight + summaryHeight + tableHeaderHeight + (rowCount + 1) * rowHeight + footerHeight) * scale).toInt()
+    val height = ((headerHeight + summaryHeight + tableHeaderHeight + (rowCount + 1) * rowHeight) * scale).toInt()
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val navy = android.graphics.Color.rgb(16, 40, 61)
@@ -731,8 +738,6 @@ internal fun writePng(
     val totals = if (mode == "مفرق") listOf("${retailRows.sumOf { it.box }}", "${retailRows.sumOf { it.carton }}", "الإجمالي", "") else listOf("${rows.sumOf { it.sale }}", "${rows.sumOf { it.returned }}", "${rows.sumOf { it.loading }}", "", "الإجمالي", "")
     canvas.drawRect(0f, y * scale, width.toFloat(), (y + rowHeight) * scale, paint.apply { color = totalColor })
     totals.forEachIndexed { index, value -> text(value, xStarts[index] + widths[index] / 2f, y + 27f, 12f, if (value == "0") muted else if (index < 2) green else navy) }
-    y += rowHeight
-    text("تقرير حركة المندوب — نموذج تصدير PNG", logicalWidth / 2f, y + 25f, 11f, android.graphics.Color.rgb(104, 119, 130))
     val output = if (uri.scheme == "file") java.io.FileOutputStream(uri.path ?: error("مسار PNG غير صالح")) else context.contentResolver.openOutputStream(uri)
     output?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         ?: error("تعذر إنشاء صورة PNG")

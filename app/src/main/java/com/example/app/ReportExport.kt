@@ -3,6 +3,10 @@ package com.example.app
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
+import org.apache.poi.ss.usermodel.BorderStyle
+import org.apache.poi.ss.usermodel.FillPatternType
+import org.apache.poi.ss.usermodel.HorizontalAlignment
+import org.apache.poi.ss.usermodel.IndexedColors
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 
@@ -35,35 +39,91 @@ internal fun shareXlsx(
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
         val headerStyle = workbook.createCellStyle().apply {
-            fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.TEAL.index
-            setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND)
-            setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER)
+            fillForegroundColor = IndexedColors.TEAL.index
+            setFillPattern(FillPatternType.SOLID_FOREGROUND)
+            setAlignment(HorizontalAlignment.CENTER)
+            setBorderTop(BorderStyle.THIN)
+            setBorderBottom(BorderStyle.THIN)
+            setBorderLeft(BorderStyle.THIN)
+            setBorderRight(BorderStyle.THIN)
         }
-        val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+        val headerFont = workbook.createFont().apply {
+            bold = true
+            color = IndexedColors.WHITE.index
+        }
+        headerStyle.setFont(headerFont)
+
+        fun bodyStyle(alternate: Boolean): org.apache.poi.ss.usermodel.CellStyle = workbook.createCellStyle().apply {
+            if (alternate) {
+                fillForegroundColor = IndexedColors.PALE_BLUE.index
+                setFillPattern(FillPatternType.SOLID_FOREGROUND)
+            }
+            setAlignment(HorizontalAlignment.CENTER)
+            setBorderTop(BorderStyle.THIN)
+            setBorderBottom(BorderStyle.THIN)
+            setBorderLeft(BorderStyle.THIN)
+            setBorderRight(BorderStyle.THIN)
+        }
+        val totalStyle = workbook.createCellStyle().apply {
+            fillForegroundColor = IndexedColors.LIGHT_TURQUOISE.index
+            setFillPattern(FillPatternType.SOLID_FOREGROUND)
+            setAlignment(HorizontalAlignment.CENTER)
+            setBorderTop(BorderStyle.THIN)
+            setBorderBottom(BorderStyle.THIN)
+            setBorderLeft(BorderStyle.THIN)
+            setBorderRight(BorderStyle.THIN)
+        }
+        val totalFont = workbook.createFont().apply { bold = true; color = IndexedColors.DARK_BLUE.index }
+        totalStyle.setFont(totalFont)
+
+        val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة")
+        else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+        val widths = if (mode == "مفرق") listOf(14, 32, 14, 14) else listOf(14, 32, 12, 14, 14, 14)
+
         reports.forEachIndexed { reportIndex, report ->
-            val baseName = report.salesperson.ifBlank { "مندوب" }.replace(Regex("[\\\\/?*\\[\\]:]"), "").take(28).ifBlank { "مندوب" }
+            val baseName = report.salesperson.ifBlank { "مندوب" }
+                .replace(Regex("[\\\\/?*\\[\\]:]"), "")
+                .take(28)
+                .ifBlank { "مندوب" }
             val sheet = workbook.createSheet("${baseName}_${reportIndex + 1}".take(31))
-            val header = sheet.createRow(0)
-            headings.forEachIndexed { i, value ->
-                header.createCell(i).apply { setCellValue(value); cellStyle = headerStyle }
+            sheet.setRightToLeft(true)
+            sheet.createFreezePane(0, 1)
+            val headerRow = sheet.createRow(0)
+            headings.forEachIndexed { index, heading ->
+                sheet.setColumnWidth(index, widths[index] * 256)
+                headerRow.createCell(index).apply {
+                    setCellValue(heading)
+                    cellStyle = headerStyle
+                }
             }
             if (mode == "مفرق") {
                 report.retailRows.forEachIndexed { rowIndex, row ->
-                    val r = sheet.createRow(rowIndex + 1)
-                    listOf(row.date, row.material).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
-                    r.createCell(2).setCellValue(row.carton.toDouble())
-                    r.createCell(3).setCellValue(row.box.toDouble())
+                    val excelRow = sheet.createRow(rowIndex + 1)
+                    val style = bodyStyle(rowIndex % 2 == 1)
+                    listOf(row.date, row.material).forEachIndexed { index, value ->
+                        excelRow.createCell(index).apply { setCellValue(value); cellStyle = style }
+                    }
+                    excelRow.createCell(2).apply { setCellValue(row.carton.toDouble()); cellStyle = style }
+                    excelRow.createCell(3).apply { setCellValue(row.box.toDouble()); cellStyle = style }
                 }
+                val totalRow = sheet.createRow(report.retailRows.size + 1)
+                listOf("", "الإجمالي", report.retailRows.sumOf { it.carton }.toDouble(), report.retailRows.sumOf { it.box }.toDouble())
+                    .forEachIndexed { index, value -> totalRow.createCell(index).apply { if (value is String) setCellValue(value) else setCellValue(value as Double); cellStyle = totalStyle } }
             } else {
                 report.rows.forEachIndexed { rowIndex, row ->
-                    val r = sheet.createRow(rowIndex + 1)
-                    listOf(row.date, row.material, row.unit).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
-                    r.createCell(3).setCellValue(row.loading.toDouble())
-                    r.createCell(4).setCellValue(row.returned.toDouble())
-                    r.createCell(5).setCellValue(row.sale.toDouble())
+                    val excelRow = sheet.createRow(rowIndex + 1)
+                    val style = bodyStyle(rowIndex % 2 == 1)
+                    listOf(row.date, row.material, row.unit).forEachIndexed { index, value ->
+                        excelRow.createCell(index).apply { setCellValue(value); cellStyle = style }
+                    }
+                    listOf(row.loading, row.returned, row.sale).forEachIndexed { offset, value ->
+                        excelRow.createCell(offset + 3).apply { setCellValue(value.toDouble()); cellStyle = style }
+                    }
                 }
+                val totalRow = sheet.createRow(report.rows.size + 1)
+                listOf("", "الإجمالي", "", report.rows.sumOf { it.loading }.toDouble(), report.rows.sumOf { it.returned }.toDouble(), report.rows.sumOf { it.sale }.toDouble())
+                    .forEachIndexed { index, value -> totalRow.createCell(index).apply { if (value is String) setCellValue(value) else setCellValue(value as Double); cellStyle = totalStyle } }
             }
-            for (i in headings.indices) sheet.autoSizeColumn(i)
         }
         file.outputStream().use { workbook.write(it) }
     }
