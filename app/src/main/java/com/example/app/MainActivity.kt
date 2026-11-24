@@ -696,9 +696,9 @@ internal fun writePng(
     val totalColor = android.graphics.Color.rgb(222, 242, 245)
     val muted = android.graphics.Color.rgb(150, 170, 176)
     val green = android.graphics.Color.rgb(46, 125, 80)
-    val cairoBold = Typeface.create(ResourcesCompat.getFont(context, R.font.cairo_bold) ?: Typeface.DEFAULT, Typeface.BOLD)
+    val reportBold = Typeface.create("sans-serif", Typeface.BOLD)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
-        typeface = cairoBold
+        typeface = reportBold
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
         isSubpixelText = true
@@ -707,7 +707,7 @@ internal fun writePng(
         paint.textSize = size * scale
         paint.color = color
         paint.textAlign = align
-        paint.typeface = cairoBold
+        paint.typeface = reportBold
         canvas.drawText(value, x * scale, y * scale, paint)
     }
     fun cellColor(value: String, index: Int): Int = when {
