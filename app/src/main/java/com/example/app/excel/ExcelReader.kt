@@ -10,6 +10,8 @@ import org.apache.poi.ss.usermodel.Sheet
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
+import java.io.File
+import java.io.InputStream
 import java.util.Date
 import java.util.Locale
 
@@ -18,9 +20,13 @@ class ExcelReader(private val contentResolver: ContentResolver) {
     fun read(uri: Uri): List<Invoice> {
         val input = contentResolver.openInputStream(uri)
             ?: throw IllegalArgumentException("تعذر فتح ملف Excel")
+        return input.use { parseStream(it) }
+    }
 
-        input.use { stream ->
-            WorkbookFactory.create(stream).use { workbook ->
+    fun readFile(file: File): List<Invoice> = file.inputStream().use { parseStream(it) }
+
+    private fun parseStream(stream: InputStream): List<Invoice> {
+        WorkbookFactory.create(stream).use { workbook ->
                 for (sheet in workbook) {
                     val pivotRows = parsePivotSheet(sheet)
                     if (pivotRows.isNotEmpty()) return pivotRows
@@ -33,7 +39,6 @@ class ExcelReader(private val contentResolver: ContentResolver) {
                     if (flatRows.isNotEmpty()) return flatRows
                 }
                 lastMissingColumns?.let { throw MissingColumnsException(it) }
-            }
         }
         return emptyList()
     }

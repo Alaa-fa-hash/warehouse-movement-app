@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +69,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Date
 import java.util.Locale
 import com.example.app.excel.ExcelReader
@@ -126,6 +128,7 @@ private fun WarehouseApp() {
     val snackbarHostState = remember { SnackbarHostState() }
     val excelReader = remember(context) { ExcelReader(context.contentResolver) }
     val preferences = remember(context) { context.getSharedPreferences("warehouse_preferences", android.content.Context.MODE_PRIVATE) }
+    val savedImportFile = remember(context) { File(context.filesDir, "imports/last-report.xlsx") }
     var priorityCodes by remember {
         mutableStateOf(preferences.getString("priority_codes", "")!!.split('|').filter { it.isNotBlank() }.take(4))
     }
@@ -138,6 +141,18 @@ private fun WarehouseApp() {
     var aliasCode by remember { mutableStateOf<String?>(null) }
     var aliasText by remember { mutableStateOf("") }
     var exportRows by remember { mutableStateOf<List<ReportRow>>(emptyList()) }
+    LaunchedEffect(context) {
+        selectedMode = preferences.getString("sales_mode", "جملة") ?: "جملة"
+        selectedFile = preferences.getString("last_file_name", "")?.takeIf { it.isNotBlank() }
+            ?: "مثال تجريبي — استورد ملف Excel للبيانات الفعلية"
+        if (savedImportFile.exists()) {
+            isReading = true
+            runCatching { withContext(Dispatchers.IO) { excelReader.readFile(savedImportFile) } }
+                .onSuccess { restored -> invoices = restored }
+                .onFailure { savedImportFile.delete() }
+            isReading = false
+        }
+    }
     val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) scope.launch { runCatching { writeCsv(context, uri, exportRows) }.onSuccess { snackbarHostState.showSnackbar("تم تصدير ملف Excel بصيغة CSV") }.onFailure { snackbarHostState.showSnackbar("فشل تصدير Excel: ${it.message}") } }
     }
@@ -159,10 +174,17 @@ private fun WarehouseApp() {
                 }
                 selectedFile = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                     ?: "ملف Excel محدد"
+                preferences.edit().putString("last_file_name", selectedFile).apply()
                 scope.launch {
                     isReading = true
                     try {
-                        val parsed = withContext(Dispatchers.IO) { excelReader.read(uri) }
+                        val parsed = withContext(Dispatchers.IO) {
+                            savedImportFile.parentFile?.mkdirs()
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                savedImportFile.outputStream().use { output -> input.copyTo(output) }
+                            } ?: throw IllegalArgumentException("تعذر فتح ملف Excel")
+                            excelReader.readFile(savedImportFile)
+                        }
                         invoices = parsed
                         selectedSalesperson = null
                         snackbarHostState.showSnackbar("تمت قراءة ${parsed.size} حركة من ملف Excel")
@@ -216,12 +238,18 @@ private fun WarehouseApp() {
                         )
                         FileCard(
                             fileName = selectedFile,
-                            hasFile = pickedUri != null,
+                            hasFile = pickedUri != null || invoices.isNotEmpty(),
                             movementCount = invoices.size,
                             materialCount = invoices.map { it.itemCode }.filter(String::isNotBlank).distinct().size,
                             salespersonCount = salespeople.size,
                         )
-                        Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it }, salespeople = salespeople, selectedSalesperson = selectedSalesperson, onSalespersonChange = { selectedSalesperson = it })
+                        Filters(
+                            selectedMode = selectedMode,
+                            onModeChange = { selectedMode = it; preferences.edit().putString("sales_mode", it).apply() },
+                            salespeople = salespeople,
+                            selectedSalesperson = selectedSalesperson,
+                            onSalespersonChange = { selectedSalesperson = it },
+                        )
                         PriorityMaterials(
                             materials = invoices.distinctBy { it.itemCode }.filter { it.itemCode.isNotBlank() },
                             selectedCodes = priorityCodes,
