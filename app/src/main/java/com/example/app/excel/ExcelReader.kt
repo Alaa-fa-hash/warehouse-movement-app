@@ -119,7 +119,7 @@ class ExcelReader(private val contentResolver: ContentResolver) {
                 normalizedMovement.startsWith("مبيع:") || normalizedMovement.startsWith("مبيع") -> MovementKind.SALE
                 else -> continue
             }
-            val quantityColumn = if (kind == MovementKind.TRANSFER_INPUT) inputColumn else outputColumn
+            val quantityColumn = (if (kind == MovementKind.TRANSFER_INPUT) inputColumn else outputColumn)
                 ?: throw IllegalArgumentException("ترويسة كمية الإدخالات أو الإخراجات غير موجودة")
             val quantity = parseDouble(cells.getOrNull(quantityColumn).orEmpty())
             if (quantity == 0.0) continue
