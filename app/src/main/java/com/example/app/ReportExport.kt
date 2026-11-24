@@ -10,6 +10,7 @@ import org.apache.poi.ss.usermodel.IndexedColors
 import org.apache.poi.xssf.usermodel.XSSFCellStyle
 import org.apache.poi.xssf.usermodel.XSSFColor
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import org.openxmlformats.schemas.spreadsheetml.x2006.main.CTColor
 import java.io.File
 
 internal data class ExportReport(
@@ -40,7 +41,11 @@ internal fun shareXlsx(
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
-        fun rgb(red: Int, green: Int, blue: Int): XSSFColor = XSSFColor(byteArrayOf(red.toByte(), green.toByte(), blue.toByte()))
+        fun rgb(red: Int, green: Int, blue: Int): XSSFColor {
+            val color = CTColor.Factory.newInstance()
+            color.rgb = byteArrayOf(red.toByte(), green.toByte(), blue.toByte())
+            return XSSFColor(color)
+        }
         val headerStyle = workbook.createCellStyle().apply {
             setFillForegroundColor(rgb(15, 153, 168))
             setFillPattern(FillPatternType.SOLID_FOREGROUND)
