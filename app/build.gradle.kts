@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// poi-android 3.17 already bundles the stax2 classes. Aalto declares the
+// external artifact transitively, which otherwise creates duplicate classes.
+configurations.all {
+    exclude(group = "org.codehaus.woodstox", module = "stax2-api")
+}
+
 android {
     namespace = "com.example.app"
     compileSdk = 35
