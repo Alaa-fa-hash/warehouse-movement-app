@@ -698,10 +698,10 @@ internal fun writePng(
     val muted = android.graphics.Color.rgb(150, 170, 176)
     val green = android.graphics.Color.rgb(46, 125, 80)
     val reportBold = Typeface.create("sans-serif", Typeface.BOLD)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply {
         typeface = reportBold
         textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
+        isFakeBoldText = false
         isSubpixelText = true
     }
     fun text(value: String, x: Float, y: Float, size: Float, color: Int = navy, align: Paint.Align = Paint.Align.CENTER) {
