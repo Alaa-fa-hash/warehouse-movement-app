@@ -387,14 +387,16 @@ private fun retailRows(
         .filter { it.movementKind() == MovementKind.SALE }
         .groupBy { Key(reportDate(it.date), it.itemCode, aliases[it.itemCode]?.takeIf(String::isNotBlank) ?: it.defaultAlias()) }
         .map { (key, movements) ->
-            RetailReportRow(
+            key to RetailReportRow(
                 date = key.date,
                 material = key.material,
                 carton = movements.filter { normalizedUnit(it.unit).contains("طرد") }.sumOf { it.quantity.toInt() },
                 box = movements.filter { normalizedUnit(it.unit).contains("علب") || normalizedUnit(it.unit).contains("علبه") }.sumOf { it.quantity.toInt() },
             )
         }
-        .filter { it.carton != 0 || it.box != 0 }
+        .filter { (_, row) -> row.carton != 0 || row.box != 0 }
+        .sortedWith(compareBy({ priorityOrder[it.first.code] ?: 1000 }, { it.second.date }, { it.second.material }))
+        .map { it.second }
         .take(60)
 }
 
