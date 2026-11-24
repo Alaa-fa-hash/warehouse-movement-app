@@ -3,12 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// poi-android 3.17 already bundles the stax2 classes. Aalto declares the
-// external artifact transitively, which otherwise creates duplicate classes.
-configurations.all {
-    exclude(group = "org.codehaus.woodstox", module = "stax2-api")
-}
-
 android {
     namespace = "com.example.app"
     compileSdk = 35
@@ -80,9 +74,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.github.vince688:poi-android:3.17") {
-        exclude(group = "org.codehaus.woodstox", module = "stax2-api")
-    }
-    implementation("com.fasterxml:aalto-xml:1.3.3")
+    // This poi-android fork already bundles Aalto and stax2 classes.
+    implementation("com.github.vince688:poi-android:3.17")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
