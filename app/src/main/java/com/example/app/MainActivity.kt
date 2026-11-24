@@ -66,6 +66,7 @@ import com.example.app.excel.MovementKind
 import com.example.app.excel.SalesMode
 import com.example.app.excel.filterForMode
 import com.example.app.excel.movementKind
+import com.example.app.excel.defaultAlias
 
 private val Navy = Color(0xFF10283D)
 private val Teal = Color(0xFF1196A7)
@@ -197,10 +198,10 @@ private fun WarehouseApp() {
 
 private fun invoiceRows(invoices: List<Invoice>): List<ReportRow> = invoices.take(60).map { invoice ->
     when (invoice.movementKind()) {
-        MovementKind.TRANSFER_INPUT -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, invoice.quantity.toInt(), 0, 0)
-        MovementKind.TRANSFER_OUTPUT -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, invoice.quantity.toInt(), 0)
-        MovementKind.SALE -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, 0, invoice.quantity.toInt())
-        MovementKind.UNKNOWN -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, 0, 0)
+        MovementKind.TRANSFER_INPUT -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, invoice.quantity.toInt(), 0, 0)
+        MovementKind.TRANSFER_OUTPUT -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, invoice.quantity.toInt(), 0)
+        MovementKind.SALE -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, 0, invoice.quantity.toInt())
+        MovementKind.UNKNOWN -> ReportRow(invoice.date.toString(), invoice.defaultAlias(), invoice.unit, 0, 0, 0)
     }
 }
 

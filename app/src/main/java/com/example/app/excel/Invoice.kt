@@ -15,6 +15,19 @@ data class Invoice(
     val salesperson: String,
 )
 
+fun Invoice.defaultAlias(): String {
+    val ignored = setOf("الصوص", "صوص", "رقم", "مادة")
+    return itemName
+        .replace(Regex("[0-9٠-٩]+"), " ")
+        .replace("*", " ")
+        .replace(Regex("[()\\[\\],.:/\\-]+"), " ")
+        .split(Regex("\\s+"))
+        .firstOrNull { it.isNotBlank() && it !in ignored }
+        ?.trim()
+        ?.ifBlank { itemName }
+        ?: itemName
+}
+
 enum class MovementKind {
     TRANSFER_INPUT,
     TRANSFER_OUTPUT,
