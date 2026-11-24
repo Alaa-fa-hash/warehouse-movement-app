@@ -242,7 +242,13 @@ private fun WarehouseApp() {
                     }
                     if (reportGroups.isEmpty()) {
                         item {
-                            ReportCard(mode = selectedMode, salespersonName = "كل المندوبين", rows = reportRows, retailRows = retailRows(orderedInvoices, aliases), onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") })
+                            ReportCard(
+                                mode = selectedMode,
+                                salespersonName = "كل المندوبين",
+                                rows = reportRows,
+                                retailRows = retailRows(orderedInvoices, aliases),
+                                onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") },
+                            )
                         }
                     } else {
                         reportGroups.forEach { (person, personInvoices) ->
@@ -253,7 +259,7 @@ private fun WarehouseApp() {
                                     salespersonName = person,
                                     rows = personRows,
                                     retailRows = retailRows(personInvoices, aliases),
-                                    onExportPng = { sharePngReport(context, person, personRows) },
+                                    onExportPng = { sharePngReport(context, person, personRows, selectedMode, retailRows(personInvoices, aliases)) },
                                 )
                             }
                         }
@@ -618,11 +624,18 @@ private fun writeCsv(context: android.content.Context, uri: Uri, rows: List<Repo
 
 private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 
-internal fun writePng(context: android.content.Context, uri: Uri, rows: List<ReportRow>) {
+internal fun writePng(
+    context: android.content.Context,
+    uri: Uri,
+    rows: List<ReportRow>,
+    mode: String = "جملة",
+    retailRows: List<RetailReportRow> = emptyList(),
+) {
     val width = 1400
     val rowHeight = 58
     val headerHeight = 150
-    val bitmap = Bitmap.createBitmap(width, headerHeight + (rows.size + 1) * rowHeight + 40, Bitmap.Config.ARGB_8888)
+    val rowCount = if (mode == "مفرق") retailRows.size else rows.size
+    val bitmap = Bitmap.createBitmap(width, headerHeight + (rowCount + 1) * rowHeight + 40, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     canvas.drawColor(android.graphics.Color.rgb(247, 243, 234))
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(16, 40, 61); textSize = 28f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.RIGHT }
@@ -631,8 +644,12 @@ internal fun writePng(context: android.content.Context, uri: Uri, rows: List<Rep
     paint.typeface = Typeface.DEFAULT
     canvas.drawText("تصدير التقرير — ${rows.size} حركة", width - 40f, 95f, paint)
 
-    val headers = listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
-    val values = rows.map { listOf(it.date, it.material, it.unit, it.loading.toString(), it.returned.toString(), it.sale.toString()) }
+    val headers = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+    val values = if (mode == "مفرق") {
+        retailRows.map { listOf(it.date, it.material, it.carton.toString(), it.box.toString()) }
+    } else {
+        rows.map { listOf(it.date, it.material, it.unit, it.loading.toString(), it.returned.toString(), it.sale.toString()) }
+    }
     val columnWidth = width / headers.size.toFloat()
     val top = headerHeight.toFloat()
     paint.textSize = 20f

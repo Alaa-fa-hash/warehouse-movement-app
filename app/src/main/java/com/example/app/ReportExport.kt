@@ -12,10 +12,16 @@ internal data class ExportReport(
     val retailRows: List<RetailReportRow>,
 )
 
-internal fun sharePngReport(context: Context, salesperson: String, rows: List<ReportRow>) {
+internal fun sharePngReport(
+    context: Context,
+    salesperson: String,
+    rows: List<ReportRow>,
+    mode: String,
+    retailRows: List<RetailReportRow>,
+) {
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "report-${salesperson.hashCode()}.png")
-    writePng(context, android.net.Uri.fromFile(file), rows)
+    writePng(context, android.net.Uri.fromFile(file), rows, mode, retailRows)
     shareFile(context, file, "image/png", "تقرير $salesperson")
 }
 
