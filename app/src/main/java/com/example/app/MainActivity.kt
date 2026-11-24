@@ -64,6 +64,7 @@ import com.example.app.excel.Invoice
 import com.example.app.excel.MovementKind
 import com.example.app.excel.SalesMode
 import com.example.app.excel.filterForMode
+import com.example.app.excel.movementKind
 
 private val Navy = Color(0xFF10283D)
 private val Teal = Color(0xFF1196A7)
@@ -156,7 +157,7 @@ private fun WarehouseApp() {
                             onExport = { },
                             isReading = isReading,
                         )
-                        FileCard(fileName = selectedFile, hasFile = pickedUri != null, movementCount = invoices.size, materialCount = invoices.map { it.itemCode }.filter(String::isNotBlank).distinct().size, salespersonCount = salespeople.size)
+                        FileCard(fileName = selectedFile, hasFile = pickedUri != null)
                         Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it }, salespeople = salespeople, selectedSalesperson = selectedSalesperson, onSalespersonChange = { selectedSalesperson = it })
                         PriorityMaterials()
                         ReportsHeader(mode = selectedMode, filteredCount = filteredInvoices.size)

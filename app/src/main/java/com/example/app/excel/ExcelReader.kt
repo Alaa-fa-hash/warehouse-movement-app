@@ -3,7 +3,6 @@ package com.example.app.excel
 import android.content.ContentResolver
 import android.net.Uri
 import org.apache.poi.ss.usermodel.Cell
-import org.apache.poi.ss.usermodel.CellType
 import org.apache.poi.ss.usermodel.DataFormatter
 import org.apache.poi.ss.usermodel.DateUtil
 import org.apache.poi.ss.usermodel.Row
@@ -110,7 +109,7 @@ class ExcelReader(private val contentResolver: ContentResolver) {
         formatter: DataFormatter,
         evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): String {
-        if (cell == null || cell.cellType == CellType.BLANK) return ""
+        if (cell == null || cell.cellType == Cell.CELL_TYPE_BLANK) return ""
         return formatter.formatCellValue(cell, evaluator).trim()
     }
 
@@ -120,10 +119,10 @@ class ExcelReader(private val contentResolver: ContentResolver) {
         formatter: DataFormatter,
         evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): Long? {
-        if (cell?.cellType == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+        if (cell?.cellType == Cell.CELL_TYPE_NUMERIC && DateUtil.isCellDateFormatted(cell)) {
             return DateUtil.getJavaDate(cell.numericCellValue).time
         }
-        val value = if (cell?.cellType == CellType.NUMERIC) formatter.formatCellValue(cell, evaluator) else text
+        val value = if (cell?.cellType == Cell.CELL_TYPE_NUMERIC) formatter.formatCellValue(cell, evaluator) else text
         val formats = listOf("yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy", "yyyy/MM/dd", "dd.MM.yyyy")
         formats.forEach { pattern ->
             val position = ParsePosition(0)
