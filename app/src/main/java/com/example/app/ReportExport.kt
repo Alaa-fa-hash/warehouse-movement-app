@@ -26,8 +26,8 @@ internal fun shareXlsx(
         val sheet = workbook.createSheet("التقرير")
         val headerStyle = workbook.createCellStyle().apply {
             fillForegroundColor = org.apache.poi.ss.usermodel.IndexedColors.TEAL.index
-            fillPattern = 1.toShort()
-            alignment = 2.toShort()
+            setFillPattern(1.toShort())
+            setAlignment(2.toShort())
         }
         val header = sheet.createRow(0)
         val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
