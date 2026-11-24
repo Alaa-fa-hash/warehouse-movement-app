@@ -150,9 +150,17 @@ class ExcelReader(private val contentResolver: ContentResolver) {
         val formatter = DataFormatter(Locale.US)
         val rows = sheet.iterator()
         var columns: Map<String, Int>? = null
+        var flatColumns: Map<String, Int>? = null
         while (rows.hasNext()) {
             val row = rows.next()
             val headers = rowStrings(row, formatter)
+            val normalizedHeaders = headers.mapIndexed { index, header ->
+                SchemaValidator.normalizeHeader(header) to index
+            }.toMap()
+            if (FLAT_REQUIRED.all { normalizedHeaders.containsKey(SchemaValidator.normalizeHeader(it)) }) {
+                flatColumns = normalizedHeaders
+                break
+            }
             when (val result = SchemaValidator.validate(headers)) {
                 ValidationResult.Valid -> {
                     columns = headers.mapIndexed { index, header ->
@@ -162,6 +170,38 @@ class ExcelReader(private val contentResolver: ContentResolver) {
                 }
                 is ValidationResult.Missing -> onMissing(result.columns)
             }
+        }
+        if (flatColumns != null) {
+            val indexes = flatColumns
+            val result = mutableListOf<Invoice>()
+            while (rows.hasNext()) {
+                val row = rows.next()
+                fun value(header: String): String = cellText(row.getCell(indexes.getValue(SchemaValidator.normalizeHeader(header))), formatter)
+                val date = parseDate(row.getCell(indexes.getValue(SchemaValidator.normalizeHeader("التاريخ"))), value("التاريخ"), formatter) ?: continue
+                val itemCode = value("رمز المادة")
+                val itemName = value("اسم المادة")
+                val invoiceType = value("نوع الفاتورة")
+                if (itemCode.isBlank() || invoiceType.isBlank()) continue
+                val salesperson = value("المستودع")
+                    .removePrefix("مستودع ")
+                    .removePrefix("مستودع")
+                    .trim()
+                result += Invoice(
+                    date = date,
+                    invoiceNumber = "",
+                    customerName = "",
+                    invoiceType = invoiceType,
+                    customerType = "",
+                    itemCode = itemCode,
+                    itemName = itemName,
+                    price = 0L,
+                    quantity = kotlin.math.abs(parseDouble(value("الكمية"))),
+                    unit = value("الوحدة"),
+                    region = "",
+                    salesperson = salesperson,
+                )
+            }
+            return result
         }
         val indexes = columns ?: return emptyList()
         val result = mutableListOf<Invoice>()
@@ -206,5 +246,6 @@ class ExcelReader(private val contentResolver: ContentResolver) {
 
     companion object {
         private val ITEM_HEADER = Regex("^\\s*(\\d+)\\s*[-–—]\\s*(.+?)\\s*$")
+        private val FLAT_REQUIRED = listOf("التاريخ", "رمز المادة", "اسم المادة", "الكمية", "الوحدة", "نوع الفاتورة", "المستودع")
     }
 }
