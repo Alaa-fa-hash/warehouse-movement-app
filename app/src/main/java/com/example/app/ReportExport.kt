@@ -13,7 +13,13 @@ internal fun sharePngReport(context: Context, salesperson: String, rows: List<Re
     shareFile(context, file, "image/png", "تقرير $salesperson")
 }
 
-internal fun shareXlsx(context: Context, rows: List<ReportRow>, title: String) {
+internal fun shareXlsx(
+    context: Context,
+    rows: List<ReportRow>,
+    title: String,
+    mode: String = "جملة",
+    retailRows: List<RetailReportRow> = emptyList(),
+) {
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
@@ -24,17 +30,27 @@ internal fun shareXlsx(context: Context, rows: List<ReportRow>, title: String) {
             alignment = org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER
         }
         val header = sheet.createRow(0)
-        listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع").forEachIndexed { i, value ->
+        val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+        headings.forEachIndexed { i, value ->
             header.createCell(i).apply { setCellValue(value); cellStyle = headerStyle }
         }
-        rows.forEachIndexed { rowIndex, row ->
-            val r = sheet.createRow(rowIndex + 1)
-            listOf(row.date, row.material, row.unit).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
-            r.createCell(3).setCellValue(row.loading.toDouble())
-            r.createCell(4).setCellValue(row.returned.toDouble())
-            r.createCell(5).setCellValue(row.sale.toDouble())
+        if (mode == "مفرق") {
+            retailRows.forEachIndexed { rowIndex, row ->
+                val r = sheet.createRow(rowIndex + 1)
+                listOf(row.date, row.material).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
+                r.createCell(2).setCellValue(row.carton.toDouble())
+                r.createCell(3).setCellValue(row.box.toDouble())
+            }
+        } else {
+            rows.forEachIndexed { rowIndex, row ->
+                val r = sheet.createRow(rowIndex + 1)
+                listOf(row.date, row.material, row.unit).forEachIndexed { i, value -> r.createCell(i).setCellValue(value) }
+                r.createCell(3).setCellValue(row.loading.toDouble())
+                r.createCell(4).setCellValue(row.returned.toDouble())
+                r.createCell(5).setCellValue(row.sale.toDouble())
+            }
         }
-        for (i in 0..5) sheet.autoSizeColumn(i)
+        for (i in headings.indices) sheet.autoSizeColumn(i)
         file.outputStream().use { workbook.write(it) }
     }
     shareFile(context, file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", title)

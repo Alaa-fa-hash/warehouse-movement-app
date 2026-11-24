@@ -93,6 +93,13 @@ internal data class ReportRow(
     val sale: Int,
 )
 
+internal data class RetailReportRow(
+    val date: String,
+    val material: String,
+    val carton: Int,
+    val box: Int,
+)
+
 private val demoRows = listOf(
     ReportRow("2026-11-23", "كيكتي", "طرد", 20, 5, 15),
     ReportRow("2026-11-23", "دونيستا", "طرد", 12, 3, 9),
@@ -225,12 +232,12 @@ private fun WarehouseApp() {
                         ReportsHeader(
                             mode = selectedMode,
                             filteredCount = filteredInvoices.size,
-                            onExportExcel = { shareXlsx(context, reportRows, "تقرير حركة المندوبين") },
+                            onExportExcel = { shareXlsx(context, reportRows, "تقرير حركة المندوبين", selectedMode, retailRows(orderedInvoices, aliases)) },
                         )
                     }
                     if (reportGroups.isEmpty()) {
                         item {
-                            ReportCard(mode = selectedMode, salespersonName = "كل المندوبين", rows = reportRows, onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") })
+                            ReportCard(mode = selectedMode, salespersonName = "كل المندوبين", rows = reportRows, retailRows = retailRows(orderedInvoices, aliases), onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") })
                         }
                     } else {
                         reportGroups.forEach { (person, personInvoices) ->
@@ -240,6 +247,7 @@ private fun WarehouseApp() {
                                     mode = selectedMode,
                                     salespersonName = person,
                                     rows = personRows,
+                                    retailRows = retailRows(personInvoices, aliases),
                                     onExportPng = { sharePngReport(context, person, personRows) },
                                 )
                             }
@@ -309,6 +317,23 @@ private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = 
         MovementKind.SALE -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, invoice.quantity.toInt())
         MovementKind.UNKNOWN -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, 0)
     }
+}
+
+private fun retailRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<RetailReportRow> {
+    data class Key(val date: String, val material: String)
+    return invoices
+        .filter { it.movementKind() == MovementKind.SALE }
+        .groupBy { Key(reportDate(it.date), aliases[it.itemCode]?.takeIf(String::isNotBlank) ?: it.defaultAlias()) }
+        .map { (key, movements) ->
+            RetailReportRow(
+                date = key.date,
+                material = key.material,
+                carton = movements.filter { it.unit.contains("طرد") }.sumOf { it.quantity.toInt() },
+                box = movements.filter { it.unit.contains("علب") || it.unit.contains("علبة") }.sumOf { it.quantity.toInt() },
+            )
+        }
+        .sortedWith(compareBy({ it.date }, { it.material }))
+        .take(60)
 }
 
 private fun reportDate(epochMillis: Long): String =
@@ -493,7 +518,13 @@ private fun ReportsHeader(mode: String, filteredCount: Int, onExportExcel: () ->
 }
 
 @Composable
-private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportRow>, onExportPng: () -> Unit) {
+private fun ReportCard(
+    mode: String,
+    salespersonName: String,
+    rows: List<ReportRow>,
+    retailRows: List<RetailReportRow>,
+    onExportPng: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -508,7 +539,7 @@ private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportR
             }
             if (mode == "مفرق") {
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    SummaryCell("المبيع", rows.sumOf { it.sale }.toString(), Green)
+                    SummaryCell("المبيع", retailRows.sumOf { it.carton + it.box }.toString(), Green)
                 }
             } else {
                 Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -519,14 +550,23 @@ private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportR
             }
             HorizontalDivider(color = Border)
             Row(Modifier.fillMaxWidth().background(Teal).padding(vertical = 14.dp)) {
-                val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "الوحدة", "مبيع") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+                val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "طرد", "علبة") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
                 headings.forEach { heading ->
                     Text(heading, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 }
             }
-            rows.forEach { row ->
+            if (mode == "مفرق") retailRows.forEach { row ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    val values = if (mode == "مفرق") listOf(row.date, row.material, row.unit, row.sale.toString()) else listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString())
+                    val values = listOf(row.date, row.material, row.carton.toString(), row.box.toString())
+                    values.forEach { value ->
+                        Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                    }
+                }
+                HorizontalDivider(color = Color(0xFFDFEAED))
+            }
+            if (mode != "مفرق") rows.forEach { row ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+                    val values = listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString())
                     values.forEach { value ->
                         Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                     }
