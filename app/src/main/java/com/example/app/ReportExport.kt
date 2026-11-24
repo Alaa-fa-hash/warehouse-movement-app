@@ -40,7 +40,7 @@ internal fun shareXlsx(
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
-        fun rgb(red: Int, green: Int, blue: Int) = XSSFColor(byteArrayOf(red.toByte(), green.toByte(), blue.toByte()))
+        fun rgb(red: Int, green: Int, blue: Int): XSSFColor = XSSFColor(byteArrayOf(red.toByte(), green.toByte(), blue.toByte()))
         val headerStyle = workbook.createCellStyle().apply {
             setFillForegroundColor(rgb(15, 153, 168))
             setFillPattern(FillPatternType.SOLID_FOREGROUND)
