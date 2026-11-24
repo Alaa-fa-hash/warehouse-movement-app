@@ -21,15 +21,16 @@ class ExcelReader(private val contentResolver: ContentResolver) {
             WorkbookFactory.create(stream).use { workbook ->
                 var lastMissingColumns: List<String>? = null
                 for (sheet in workbook) {
-                    val formatter = DataFormatter(Locale("ar"))
-                    val evaluator = workbook.creationHelper.createFormulaEvaluator()
+                    // لا نقيّم الصيغ أثناء الاستيراد؛ بعض ملفات Excel تحتوي صيغاً أو
+                    // مراجع خارجية لا يدعمها POI على Android وقد تسبب انهيار القراءة.
+                    val formatter = DataFormatter(Locale.US)
                     val rows = sheet.iterator()
                     var headerRow: Row? = null
                     var columnIndexes: Map<String, Int> = emptyMap()
 
                     while (rows.hasNext()) {
                         val row = rows.next()
-                        val headers = rowToStrings(row, formatter, evaluator)
+                        val headers = rowToStrings(row, formatter)
                         when (val result = SchemaValidator.validate(headers)) {
                             ValidationResult.Valid -> {
                                 headerRow = row
@@ -49,8 +50,8 @@ class ExcelReader(private val contentResolver: ContentResolver) {
                     val result = mutableListOf<Invoice>()
                     while (rows.hasNext()) {
                         val row = rows.next()
-                        if (rowIsBlank(row, formatter, evaluator)) continue
-                        parseRow(row, columnIndexes, formatter, evaluator)?.let(result::add)
+                        if (rowIsBlank(row, formatter)) continue
+                        parseRow(row, columnIndexes, formatter)?.let(result::add)
                     }
                     return result
                 }
@@ -64,10 +65,9 @@ class ExcelReader(private val contentResolver: ContentResolver) {
         row: Row,
         columns: Map<String, Int>,
         formatter: DataFormatter,
-        evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): Invoice? {
-        fun value(header: String): String = cellText(row.getCell(columns.getValue(SchemaValidator.normalizeHeader(header))), formatter, evaluator)
-        val date = parseDate(row.getCell(columns.getValue(SchemaValidator.normalizeHeader("التاريخ"))), value("التاريخ"), formatter, evaluator)
+        fun value(header: String): String = cellText(row.getCell(columns.getValue(SchemaValidator.normalizeHeader(header))), formatter)
+        val date = parseDate(row.getCell(columns.getValue(SchemaValidator.normalizeHeader("التاريخ"))), value("التاريخ"), formatter)
             ?: return null
         val itemCode = value("رمز المادة").trim()
         val itemName = value("اسم المادة").trim()
@@ -92,37 +92,33 @@ class ExcelReader(private val contentResolver: ContentResolver) {
     private fun rowToStrings(
         row: Row,
         formatter: DataFormatter,
-        evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): List<String> {
         val last = maxOf(row.lastCellNum.toInt(), SchemaValidator.requiredColumns.size)
-        return (0 until last).map { cellText(row.getCell(it), formatter, evaluator) }
+        return (0 until last).map { cellText(row.getCell(it), formatter) }
     }
 
     private fun rowIsBlank(
         row: Row,
         formatter: DataFormatter,
-        evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
-    ): Boolean = rowToStrings(row, formatter, evaluator).all(String::isBlank)
+    ): Boolean = rowToStrings(row, formatter).all(String::isBlank)
 
     private fun cellText(
         cell: Cell?,
         formatter: DataFormatter,
-        evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): String {
         if (cell == null || cell.cellType == Cell.CELL_TYPE_BLANK) return ""
-        return formatter.formatCellValue(cell, evaluator).trim()
+        return formatter.formatCellValue(cell).trim()
     }
 
     private fun parseDate(
         cell: Cell?,
         text: String,
         formatter: DataFormatter,
-        evaluator: org.apache.poi.ss.usermodel.FormulaEvaluator,
     ): Long? {
         if (cell?.cellType == Cell.CELL_TYPE_NUMERIC && DateUtil.isCellDateFormatted(cell)) {
             return DateUtil.getJavaDate(cell.numericCellValue).time
         }
-        val value = if (cell?.cellType == Cell.CELL_TYPE_NUMERIC) formatter.formatCellValue(cell, evaluator) else text
+        val value = if (cell?.cellType == Cell.CELL_TYPE_NUMERIC) formatter.formatCellValue(cell) else text
         val formats = listOf("yyyy-MM-dd", "dd-MM-yyyy", "dd/MM/yyyy", "yyyy/MM/dd", "dd.MM.yyyy")
         formats.forEach { pattern ->
             val position = ParsePosition(0)

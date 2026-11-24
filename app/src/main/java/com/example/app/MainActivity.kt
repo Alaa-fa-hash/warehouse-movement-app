@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.app.excel.ExcelReader
@@ -119,8 +120,14 @@ private fun WarehouseApp() {
                         invoices = parsed
                         selectedSalesperson = null
                         snackbarHostState.showSnackbar("تمت قراءة ${parsed.size} حركة من ملف Excel")
-                    } catch (error: Exception) {
-                        val message = error.message ?: "تعذر قراءة ملف Excel"
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        val detail = error.message?.takeIf { it.isNotBlank() }
+                        val message = if (detail != null) {
+                            "فشل استيراد Excel: $detail"
+                        } else {
+                            "فشل استيراد Excel (${error::class.java.simpleName})"
+                        }
                         snackbarHostState.showSnackbar(message)
                     } finally {
                         isReading = false
