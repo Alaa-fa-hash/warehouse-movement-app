@@ -74,6 +74,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.github.vince688:poi-android:3.17")
+    implementation("com.github.vince688:poi-android:3.17") {
+        exclude(group = "org.codehaus.woodstox", module = "stax2-api")
+    }
+    implementation("com.fasterxml:aalto-xml:1.3.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
