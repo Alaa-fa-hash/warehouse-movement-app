@@ -7,7 +7,7 @@ android {
     namespace = "com.example.app"
     compileSdk = 35
 
-    val releaseKeystore = file("${System.getProperty(\"user.home\")}/.android/release.keystore")
+    val releaseKeystore = file("${System.getProperty("user.home")}/.android/release.keystore")
 
     defaultConfig {
         applicationId = "com.example.warehouse"
