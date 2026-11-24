@@ -8,6 +8,7 @@ import org.apache.poi.ss.usermodel.FillPatternType
 import org.apache.poi.ss.usermodel.HorizontalAlignment
 import org.apache.poi.ss.usermodel.IndexedColors
 import org.apache.poi.xssf.usermodel.XSSFCellStyle
+import org.apache.poi.xssf.usermodel.XSSFColor
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
 
@@ -39,8 +40,9 @@ internal fun shareXlsx(
     val dir = File(context.cacheDir, "reports").apply { mkdirs() }
     val file = File(dir, "warehouse-report.xlsx")
     XSSFWorkbook().use { workbook ->
+        fun rgb(red: Int, green: Int, blue: Int) = XSSFColor(byteArrayOf(red.toByte(), green.toByte(), blue.toByte()))
         val headerStyle = workbook.createCellStyle().apply {
-            fillForegroundColor = IndexedColors.TEAL.index
+            setFillForegroundColor(rgb(15, 153, 168))
             setFillPattern(FillPatternType.SOLID_FOREGROUND)
             setAlignment(HorizontalAlignment.CENTER)
             setBorderTop(BorderStyle.THIN)
@@ -56,7 +58,7 @@ internal fun shareXlsx(
 
         fun bodyStyle(alternate: Boolean): XSSFCellStyle = workbook.createCellStyle().apply {
             if (alternate) {
-                fillForegroundColor = IndexedColors.PALE_BLUE.index
+                setFillForegroundColor(rgb(244, 247, 248))
                 setFillPattern(FillPatternType.SOLID_FOREGROUND)
             }
             setAlignment(HorizontalAlignment.CENTER)

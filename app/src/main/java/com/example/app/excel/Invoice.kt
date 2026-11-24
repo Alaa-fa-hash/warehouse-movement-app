@@ -16,7 +16,7 @@ data class Invoice(
 )
 
 fun Invoice.defaultAlias(): String {
-    val ignored = setOf("الصوص", "صوص", "شوكولا", "بسكويت", "ديانا", "رقم", "مادة")
+    val ignored = setOf("الصوص", "صوص", "شوكولا", "بسكويت", "بسكوت", "ديانا", "رقم", "مادة")
     return itemName
         .replace(Regex("[0-9٠-٩]+"), " ")
         .replace("*", " ")
