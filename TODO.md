@@ -1,0 +1,33 @@
+# قائمة إنجاز تطبيق حركة مستودع المندوبين — Android Native
+
+## البنية
+
+- [x] إزالة Expo وReact Native وEAS وMetro وجميع تبعيات starter القديمة.
+- [x] إنشاء مشروع Android Native بـ Kotlin وJetpack Compose.
+- [x] تثبيت AGP 8.7.2 وGradle 8.9 وKotlin 1.9.24.
+- [x] ضبط JDK 17 وcompileSdk/targetSdk 35 وminSdk 26.
+- [x] إضافة Gradle Wrapper 8.9 وgradle-wrapper.jar.
+- [x] إضافة Android Manifest واسم التطبيق العربي والثيم الأساسي.
+
+## الواجهة الحالية
+
+- [x] واجهة RTL عربية بتصميم الألوان المعتمد.
+- [x] شاشة اختيار ملف Excel عبر Android Document Picker.
+- [x] فلتر الجملة/المفرق.
+- [x] فلتر المندوبين والمواد الأساسية ضمن الواجهة الأولية.
+- [x] بطاقة تقرير أولية مع أعمدة الجملة وتصدير Excel/PNG كعناصر واجهة.
+- [ ] نقل محلل Excel الكامل إلى Kotlin Native.
+- [ ] تفعيل الحساب الفعلي للجملة: الإدخال ناقص الإخراج.
+- [ ] تفعيل الحساب الفعلي للمفرق: فواتير المبيع فقط.
+- [ ] حفظ دليل المواد والأسماء المختصرة والمواد الأساسية عبر DataStore.
+- [ ] تصدير Excel وPNG فعليًا على Android.
+
+## البناء والتسليم
+
+- [x] إنشاء `.github/workflows/android.yml`.
+- [x] إنشاء keystore مؤقت داخل GitHub Runner للبناء.
+- [x] ربط Release APK بتوقيع CI عند توفر keystore.
+- [ ] إنشاء مستودع GitHub للمشروع.
+- [ ] دفع tag الإصدار الأول.
+- [ ] التحقق من GitHub Actions.
+- [ ] إرسال رابط APK المباشر من GitHub Release.

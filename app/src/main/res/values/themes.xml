@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.WarehouseMovement" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#10283D</item>
+        <item name="android:navigationBarColor">#F7F3EA</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
