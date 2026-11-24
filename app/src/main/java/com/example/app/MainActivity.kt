@@ -627,7 +627,7 @@ private fun ReportCard(
                 Row(Modifier.fillMaxWidth().background(if (rowIndex % 2 == 0) Color.White else Color(0xFFF4F7F8)).padding(vertical = 14.dp)) {
                     val values = listOf(row.date, row.material, row.carton.toString(), row.box.toString())
                     values.forEach { value ->
-                        Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                        Text(value, color = Navy, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                     }
                 }
                 HorizontalDivider(color = Color(0xFFDFEAED))
@@ -636,7 +636,7 @@ private fun ReportCard(
                 Row(Modifier.fillMaxWidth().background(if (rowIndex % 2 == 0) Color.White else Color(0xFFF4F7F8)).padding(vertical = 14.dp)) {
                     val values = listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString())
                     values.forEach { value ->
-                        Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                        Text(value, color = Navy, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                     }
                 }
                 HorizontalDivider(color = Color(0xFFDFEAED))
