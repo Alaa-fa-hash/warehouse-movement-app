@@ -623,8 +623,8 @@ private fun ReportCard(
                     Text(heading, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 }
             }
-            if (mode == "مفرق") retailRows.forEach { row ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+            if (mode == "مفرق") retailRows.forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth().background(if (rowIndex % 2 == 0) Color.White else Color(0xFFF4F7F8)).padding(vertical = 14.dp)) {
                     val values = listOf(row.date, row.material, row.carton.toString(), row.box.toString())
                     values.forEach { value ->
                         Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -632,8 +632,8 @@ private fun ReportCard(
                 }
                 HorizontalDivider(color = Color(0xFFDFEAED))
             }
-            if (mode != "مفرق") rows.forEach { row ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+            if (mode != "مفرق") rows.forEachIndexed { rowIndex, row ->
+                Row(Modifier.fillMaxWidth().background(if (rowIndex % 2 == 0) Color.White else Color(0xFFF4F7F8)).padding(vertical = 14.dp)) {
                     val values = listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString())
                     values.forEach { value ->
                         Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
