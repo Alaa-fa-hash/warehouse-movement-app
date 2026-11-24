@@ -1,5 +1,9 @@
 package com.example.app
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -111,6 +115,17 @@ private fun WarehouseApp() {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val excelReader = remember(context) { ExcelReader(context.contentResolver) }
+    val preferences = remember(context) { context.getSharedPreferences("warehouse_preferences", android.content.Context.MODE_PRIVATE) }
+    var priorityCodes by remember {
+        mutableStateOf(preferences.getString("priority_codes", "")!!.split('|').filter { it.isNotBlank() }.take(4))
+    }
+    var exportRows by remember { mutableStateOf<List<ReportRow>>(emptyList()) }
+    val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) scope.launch { runCatching { writeCsv(context, uri, exportRows) }.onSuccess { snackbarHostState.showSnackbar("تم تصدير ملف Excel بصيغة CSV") }.onFailure { snackbarHostState.showSnackbar("فشل تصدير Excel: ${it.message}") } }
+    }
+    val pngExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        if (uri != null) scope.launch { runCatching { writePng(context, uri, exportRows) }.onSuccess { snackbarHostState.showSnackbar("تم تصدير التقرير PNG") }.onFailure { snackbarHostState.showSnackbar("فشل تصدير PNG: ${it.message}") } }
+    }
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
@@ -152,6 +167,9 @@ private fun WarehouseApp() {
     val mode = if (selectedMode == "مفرق") SalesMode.RETAIL else SalesMode.WHOLESALE
     val salespeople = invoices.map { it.salesperson }.filter(String::isNotBlank).distinct().sorted()
     val filteredInvoices = invoices.filterForMode(mode, selectedSalesperson)
+    val priorityOrder = priorityCodes.withIndex().associate { it.value to it.index }
+    val orderedInvoices = filteredInvoices.sortedWith(compareBy({ priorityOrder[it.itemCode] ?: 1000 }, { it.itemName }, { it.unit }))
+    val reportRows = invoiceRows(orderedInvoices).ifEmpty { demoRows }
 
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
@@ -185,14 +203,26 @@ private fun WarehouseApp() {
                             salespersonCount = salespeople.size,
                         )
                         Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it }, salespeople = salespeople, selectedSalesperson = selectedSalesperson, onSalespersonChange = { selectedSalesperson = it })
-                        PriorityMaterials()
-                        ReportsHeader(mode = selectedMode, filteredCount = filteredInvoices.size)
+                        PriorityMaterials(
+                            materials = invoices.distinctBy { it.itemCode }.filter { it.itemCode.isNotBlank() },
+                            selectedCodes = priorityCodes,
+                            onChange = { codes ->
+                                priorityCodes = codes
+                                preferences.edit().putString("priority_codes", codes.joinToString("|")).apply()
+                            },
+                        )
+                        ReportsHeader(
+                            mode = selectedMode,
+                            filteredCount = filteredInvoices.size,
+                            onExportExcel = { exportRows = reportRows; csvExporter.launch("warehouse-report.csv") },
+                        )
                     }
                     item {
                         ReportCard(
                             mode = selectedMode,
                             salespersonName = selectedSalesperson ?: "كل المندوبين",
-                            rows = invoiceRows(filteredInvoices).ifEmpty { demoRows },
+                            rows = reportRows,
+                            onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") },
                         )
                     }
                     item {
@@ -342,7 +372,11 @@ private fun Filters(
 }
 
 @Composable
-private fun PriorityMaterials() {
+private fun PriorityMaterials(
+    materials: List<Invoice>,
+    selectedCodes: List<String>,
+    onChange: (List<String>) -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -354,11 +388,29 @@ private fun PriorityMaterials() {
             Text("تظهر أولًا في كل تقرير وتُحفظ تلقائيًا", color = Color(0xFF687782), fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("1", "2", "3", "4").forEach { index ->
-                    Box(Modifier.weight(1f).border(1.dp, Border, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(index, color = Teal, fontWeight = FontWeight.Bold)
-                            Text("اختر المادة", color = Navy, fontSize = 12.sp)
+                (0 until 4).forEach { slot ->
+                    var expanded by remember { mutableStateOf(false) }
+                    val selected = materials.firstOrNull { it.itemCode == selectedCodes.getOrNull(slot) }
+                    Box(Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${slot + 1}", color = Teal, fontWeight = FontWeight.Bold)
+                                Text(selected?.defaultAlias() ?: "اختر المادة", color = Navy, fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            materials.forEach { material ->
+                                DropdownMenuItem(
+                                    text = { Text("${material.defaultAlias()} (${material.itemCode})") },
+                                    onClick = {
+                                        val next = selectedCodes.toMutableList()
+                                        while (next.size < 4) next.add("")
+                                        next[slot] = material.itemCode
+                                        onChange(next.take(4))
+                                        expanded = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -369,10 +421,10 @@ private fun PriorityMaterials() {
 }
 
 @Composable
-private fun ReportsHeader(mode: String, filteredCount: Int) {
+private fun ReportsHeader(mode: String, filteredCount: Int, onExportExcel: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("$mode مبيعات — $filteredCount حركة", color = Navy, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-        TextButton(onClick = { }) {
+        TextButton(onClick = onExportExcel) {
             androidx.compose.material3.Icon(Icons.Default.FileDownload, contentDescription = null)
             Text("تصدير Excel")
         }
@@ -380,7 +432,7 @@ private fun ReportsHeader(mode: String, filteredCount: Int) {
 }
 
 @Composable
-private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportRow>) {
+private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportRow>, onExportPng: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -412,7 +464,9 @@ private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportR
                 }
                 HorizontalDivider(color = Color(0xFFDFEAED))
             }
-            Text("تصدير التقرير PNG", modifier = Modifier.fillMaxWidth().padding(16.dp), color = Navy, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Button(onClick = onExportPng, modifier = Modifier.fillMaxWidth().padding(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Teal)) {
+                Text("تصدير التقرير PNG", color = Color.White, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -423,4 +477,53 @@ private fun SummaryCell(label: String, value: String, color: Color = Navy) {
         Text(label, color = Navy, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text(value, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+private fun writeCsv(context: android.content.Context, uri: Uri, rows: List<ReportRow>) {
+    context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+        writer.write("\uFEFF")
+        writer.write("التاريخ,المادة,الوحدة,تحميل,مرتجع,مبيع\n")
+        rows.forEach { row ->
+            writer.write(listOf(row.date, row.material, row.unit, row.loading, row.returned, row.sale).joinToString(",") { csvEscape(it.toString()) })
+            writer.write("\n")
+        }
+    } ?: error("تعذر إنشاء ملف التصدير")
+}
+
+private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+
+private fun writePng(context: android.content.Context, uri: Uri, rows: List<ReportRow>) {
+    val width = 1400
+    val rowHeight = 58
+    val headerHeight = 150
+    val bitmap = Bitmap.createBitmap(width, headerHeight + (rows.size + 1) * rowHeight + 40, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    canvas.drawColor(android.graphics.Color.rgb(247, 243, 234))
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(16, 40, 61); textSize = 28f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.RIGHT }
+    canvas.drawText("تقرير حركة مستودع المندوبين", width - 40f, 55f, paint)
+    paint.textSize = 20f
+    paint.typeface = Typeface.DEFAULT
+    canvas.drawText("تصدير التقرير — ${rows.size} حركة", width - 40f, 95f, paint)
+
+    val headers = listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+    val values = rows.map { listOf(it.date, it.material, it.unit, it.loading.toString(), it.returned.toString(), it.sale.toString()) }
+    val columnWidth = width / headers.size.toFloat()
+    val top = headerHeight.toFloat()
+    paint.textSize = 20f
+    paint.typeface = Typeface.DEFAULT_BOLD
+    paint.color = android.graphics.Color.WHITE
+    paint.textAlign = Paint.Align.CENTER
+    canvas.drawRect(0f, top, width.toFloat(), top + rowHeight, paint.apply { color = android.graphics.Color.rgb(17, 150, 167) })
+    headers.forEachIndexed { index, header -> canvas.drawText(header, index * columnWidth + columnWidth / 2, top + 37f, paint.apply { color = android.graphics.Color.WHITE }) }
+    paint.typeface = Typeface.DEFAULT
+    values.forEachIndexed { rowIndex, row ->
+        val y = top + rowHeight * (rowIndex + 1)
+        paint.color = if (rowIndex % 2 == 0) android.graphics.Color.WHITE else android.graphics.Color.rgb(238, 247, 248)
+        canvas.drawRect(0f, y, width.toFloat(), y + rowHeight, paint)
+        paint.color = android.graphics.Color.rgb(16, 40, 61)
+        row.forEachIndexed { index, value -> canvas.drawText(value, index * columnWidth + columnWidth / 2, y + 37f, paint) }
+    }
+    context.contentResolver.openOutputStream(uri)?.use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output) }
+        ?: error("تعذر إنشاء صورة PNG")
+    bitmap.recycle()
 }
