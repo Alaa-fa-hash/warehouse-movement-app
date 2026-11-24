@@ -34,6 +34,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +84,7 @@ private val PaleBlue = Color(0xFFDFF1F5)
 private val Border = Color(0xFFD7E2E6)
 private val Green = Color(0xFF2E7D50)
 
-private data class ReportRow(
+internal data class ReportRow(
     val date: String,
     val material: String,
     val unit: String,
@@ -119,6 +121,14 @@ private fun WarehouseApp() {
     var priorityCodes by remember {
         mutableStateOf(preferences.getString("priority_codes", "")!!.split('|').filter { it.isNotBlank() }.take(4))
     }
+    var aliases by remember {
+        mutableStateOf(preferences.getString("aliases", "")!!.split('|').mapNotNull { entry ->
+            entry.split("=", limit = 2).takeIf { it.size == 2 }
+        }.associate { it[0] to it[1] })
+    }
+    var guideOpen by remember { mutableStateOf(false) }
+    var aliasCode by remember { mutableStateOf<String?>(null) }
+    var aliasText by remember { mutableStateOf("") }
     var exportRows by remember { mutableStateOf<List<ReportRow>>(emptyList()) }
     val csvExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) scope.launch { runCatching { writeCsv(context, uri, exportRows) }.onSuccess { snackbarHostState.showSnackbar("تم تصدير ملف Excel بصيغة CSV") }.onFailure { snackbarHostState.showSnackbar("فشل تصدير Excel: ${it.message}") } }
@@ -169,7 +179,8 @@ private fun WarehouseApp() {
     val filteredInvoices = invoices.filterForMode(mode, selectedSalesperson)
     val priorityOrder = priorityCodes.withIndex().associate { it.value to it.index }
     val orderedInvoices = filteredInvoices.sortedWith(compareBy({ priorityOrder[it.itemCode] ?: 1000 }, { it.itemName }, { it.unit }))
-    val reportRows = invoiceRows(orderedInvoices).ifEmpty { demoRows }
+    val reportGroups = orderedInvoices.groupBy { it.salesperson.ifBlank { "غير محدد" } }
+    val reportRows = invoiceRows(orderedInvoices, aliases).ifEmpty { demoRows }
 
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
@@ -192,7 +203,7 @@ private fun WarehouseApp() {
                         Header()
                         ActionRow(
                             onPickFile = { if (!isReading) filePicker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/*")) },
-                            onExport = { },
+                            onExport = { guideOpen = true },
                             isReading = isReading,
                         )
                         FileCard(
@@ -214,16 +225,25 @@ private fun WarehouseApp() {
                         ReportsHeader(
                             mode = selectedMode,
                             filteredCount = filteredInvoices.size,
-                            onExportExcel = { exportRows = reportRows; csvExporter.launch("warehouse-report.csv") },
+                            onExportExcel = { shareXlsx(context, reportRows, "تقرير حركة المندوبين") },
                         )
                     }
-                    item {
-                        ReportCard(
-                            mode = selectedMode,
-                            salespersonName = selectedSalesperson ?: "كل المندوبين",
-                            rows = reportRows,
-                            onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") },
-                        )
+                    if (reportGroups.isEmpty()) {
+                        item {
+                            ReportCard(mode = selectedMode, salespersonName = "كل المندوبين", rows = reportRows, onExportPng = { exportRows = reportRows; pngExporter.launch("warehouse-report.png") })
+                        }
+                    } else {
+                        reportGroups.forEach { (person, personInvoices) ->
+                            item {
+                                val personRows = invoiceRows(personInvoices, aliases).ifEmpty { demoRows }
+                                ReportCard(
+                                    mode = selectedMode,
+                                    salespersonName = person,
+                                    rows = personRows,
+                                    onExportPng = { sharePngReport(context, person, personRows) },
+                                )
+                            }
+                        }
                     }
                     item {
                         Text(
@@ -239,14 +259,55 @@ private fun WarehouseApp() {
             }
         }
     }
+    if (guideOpen) {
+        AlertDialog(
+            onDismissRequest = { guideOpen = false },
+            title = { Text("دليل المواد", color = Navy, fontWeight = FontWeight.Bold) },
+            text = {
+                LazyColumn {
+                    items(invoices.distinctBy { it.itemCode }.filter { it.itemCode.isNotBlank() }) { material ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text(material.itemName, color = Navy, textAlign = TextAlign.End)
+                                Text(material.itemCode, color = Color(0xFF687782), fontSize = 11.sp)
+                            }
+                            TextButton(onClick = {
+                                aliasCode = material.itemCode
+                                aliasText = aliases[material.itemCode] ?: material.defaultAlias()
+                            }) { Text(aliases[material.itemCode] ?: material.defaultAlias(), color = Teal, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { guideOpen = false }) { Text("إغلاق") } },
+        )
+    }
+    if (aliasCode != null) {
+        AlertDialog(
+            onDismissRequest = { aliasCode = null },
+            title = { Text("تعديل الاختصار") },
+            text = { OutlinedTextField(value = aliasText, onValueChange = { aliasText = it }, label = { Text("الاسم المختصر") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val code = aliasCode ?: return@TextButton
+                    val next = aliases.toMutableMap().apply { put(code, aliasText.trim()) }
+                    aliases = next
+                    preferences.edit().putString("aliases", next.entries.joinToString("|") { "${it.key}=${it.value}" }).apply()
+                    aliasCode = null
+                }) { Text("حفظ", color = Teal) }
+            },
+            dismissButton = { TextButton(onClick = { aliasCode = null }) { Text("إلغاء") } },
+        )
+    }
 }
 
-private fun invoiceRows(invoices: List<Invoice>): List<ReportRow> = invoices.take(60).map { invoice ->
+private fun invoiceRows(invoices: List<Invoice>, aliases: Map<String, String> = emptyMap()): List<ReportRow> = invoices.take(60).map { invoice ->
+    val materialAlias = aliases[invoice.itemCode]?.takeIf { it.isNotBlank() } ?: invoice.defaultAlias()
     when (invoice.movementKind()) {
-        MovementKind.TRANSFER_INPUT -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, invoice.quantity.toInt(), 0, 0)
-        MovementKind.TRANSFER_OUTPUT -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, invoice.quantity.toInt(), 0)
-        MovementKind.SALE -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, 0, invoice.quantity.toInt())
-        MovementKind.UNKNOWN -> ReportRow(reportDate(invoice.date), invoice.defaultAlias(), invoice.unit, 0, 0, 0)
+        MovementKind.TRANSFER_INPUT -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, invoice.quantity.toInt(), 0, 0)
+        MovementKind.TRANSFER_OUTPUT -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, invoice.quantity.toInt(), 0)
+        MovementKind.SALE -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, invoice.quantity.toInt())
+        MovementKind.UNKNOWN -> ReportRow(reportDate(invoice.date), materialAlias, invoice.unit, 0, 0, 0)
     }
 }
 
@@ -492,7 +553,7 @@ private fun writeCsv(context: android.content.Context, uri: Uri, rows: List<Repo
 
 private fun csvEscape(value: String): String = "\"${value.replace("\"", "\"\"")}\""
 
-private fun writePng(context: android.content.Context, uri: Uri, rows: List<ReportRow>) {
+internal fun writePng(context: android.content.Context, uri: Uri, rows: List<ReportRow>) {
     val width = 1400
     val rowHeight = 58
     val headerHeight = 150
@@ -523,7 +584,8 @@ private fun writePng(context: android.content.Context, uri: Uri, rows: List<Repo
         paint.color = android.graphics.Color.rgb(16, 40, 61)
         row.forEachIndexed { index, value -> canvas.drawText(value, index * columnWidth + columnWidth / 2, y + 37f, paint) }
     }
-    context.contentResolver.openOutputStream(uri)?.use { output -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, output) }
+    val output = if (uri.scheme == "file") java.io.FileOutputStream(uri.path ?: error("مسار PNG غير صالح")) else context.contentResolver.openOutputStream(uri)
+    output?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         ?: error("تعذر إنشاء صورة PNG")
     bitmap.recycle()
 }
