@@ -690,8 +690,13 @@ internal fun writePng(
     val totalColor = android.graphics.Color.rgb(222, 242, 245)
     val muted = android.graphics.Color.rgb(150, 170, 176)
     val green = android.graphics.Color.rgb(46, 125, 80)
-    val cairoBold = ResourcesCompat.getFont(context, R.font.cairo_bold) ?: Typeface.DEFAULT_BOLD
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = cairoBold; textAlign = Paint.Align.CENTER }
+    val cairoBold = Typeface.create(ResourcesCompat.getFont(context, R.font.cairo_bold) ?: Typeface.DEFAULT, Typeface.BOLD)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+        typeface = cairoBold
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+        isSubpixelText = true
+    }
     fun text(value: String, x: Float, y: Float, size: Float, color: Int = navy, align: Paint.Align = Paint.Align.CENTER) {
         paint.textSize = size * scale
         paint.color = color
@@ -733,6 +738,8 @@ internal fun writePng(
     values.forEachIndexed { rowIndex, row ->
         drawRowBackground(y, if (rowIndex % 2 == 0) android.graphics.Color.WHITE else rowAlt)
         row.forEachIndexed { index, value -> text(value, xStarts[index] + widths[index] / 2f, y + 27f, if (index == 4 && mode == "جملة") 12f else 11f, cellColor(value, index)) }
+        paint.color = android.graphics.Color.rgb(218, 232, 235)
+        canvas.drawRect(0f, (y + rowHeight - 0.5f) * scale, width.toFloat(), (y + rowHeight) * scale, paint)
         y += rowHeight
     }
     val totals = if (mode == "مفرق") listOf("${retailRows.sumOf { it.box }}", "${retailRows.sumOf { it.carton }}", "الإجمالي", "") else listOf("${rows.sumOf { it.sale }}", "${rows.sumOf { it.returned }}", "${rows.sumOf { it.loading }}", "", "الإجمالي", "")
