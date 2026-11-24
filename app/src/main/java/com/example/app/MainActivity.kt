@@ -371,6 +371,7 @@ private fun invoiceRows(
                 sale = loading - returned,
             )
         }
+        .filter { (_, row) -> row.loading != 0 || row.returned != 0 || row.sale != 0 }
         .sortedWith(compareBy({ priorityOrder[it.first.code] ?: 1000 }, { it.second.date }, { it.second.material }, { it.second.unit }))
         .map { it.second }
         .take(60)
@@ -393,6 +394,7 @@ private fun retailRows(
                 box = movements.filter { normalizedUnit(it.unit).contains("علب") || normalizedUnit(it.unit).contains("علبه") }.sumOf { it.quantity.toInt() },
             )
         }
+        .filter { it.carton != 0 || it.box != 0 }
         .take(60)
 }
 
