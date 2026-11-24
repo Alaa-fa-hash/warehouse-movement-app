@@ -28,17 +28,23 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +55,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.app.excel.ExcelReader
+import com.example.app.excel.Invoice
+import com.example.app.excel.MovementKind
+import com.example.app.excel.SalesMode
+import com.example.app.excel.filterForMode
 
 private val Navy = Color(0xFF10283D)
 private val Teal = Color(0xFF1196A7)
@@ -83,13 +98,39 @@ private fun WarehouseApp() {
     var selectedMode by remember { mutableStateOf("جملة") }
     var selectedFile by remember { mutableStateOf("مثال تجريبي — استورد ملف Excel للبيانات الفعلية") }
     var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var invoices by remember { mutableStateOf<List<Invoice>>(emptyList()) }
+    var selectedSalesperson by remember { mutableStateOf<String?>(null) }
+    var isReading by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val excelReader = remember(context) { ExcelReader(context.contentResolver) }
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
             pickedUri = uri
-            if (uri != null) selectedFile = uri.lastPathSegment ?: "ملف Excel محدد"
+            if (uri != null) {
+                selectedFile = uri.lastPathSegment ?: "ملف Excel محدد"
+                scope.launch {
+                    isReading = true
+                    try {
+                        val parsed = withContext(Dispatchers.IO) { excelReader.read(uri) }
+                        invoices = parsed
+                        selectedSalesperson = null
+                        snackbarHostState.showSnackbar("تمت قراءة ${parsed.size} حركة من ملف Excel")
+                    } catch (error: Exception) {
+                        val message = error.message ?: "تعذر قراءة ملف Excel"
+                        snackbarHostState.showSnackbar(message)
+                    } finally {
+                        isReading = false
+                    }
+                }
+            }
         },
     )
+    val mode = if (selectedMode == "مفرق") SalesMode.RETAIL else SalesMode.WHOLESALE
+    val salespeople = invoices.map { it.salesperson }.filter(String::isNotBlank).distinct().sorted()
+    val filteredInvoices = invoices.filterForMode(mode, selectedSalesperson)
 
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
@@ -99,23 +140,28 @@ private fun WarehouseApp() {
         ),
     ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Surface(modifier = Modifier.fillMaxSize(), color = Background) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 36.dp),
-                ) {
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                containerColor = Background,
+            ) { innerPadding ->
+                Surface(modifier = Modifier.fillMaxSize().padding(innerPadding), color = Background) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 36.dp),
+                    ) {
                     item {
                         Header()
                         ActionRow(
-                            onPickFile = { filePicker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/*")) },
+                            onPickFile = { if (!isReading) filePicker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/*")) },
                             onExport = { },
+                            isReading = isReading,
                         )
-                        FileCard(fileName = selectedFile, hasFile = pickedUri != null)
-                        Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it })
+                        FileCard(fileName = selectedFile, hasFile = pickedUri != null, movementCount = invoices.size, materialCount = invoices.map { it.itemCode }.filter(String::isNotBlank).distinct().size, salespersonCount = salespeople.size)
+                        Filters(selectedMode = selectedMode, onModeChange = { selectedMode = it }, salespeople = salespeople, selectedSalesperson = selectedSalesperson, onSalespersonChange = { selectedSalesperson = it })
                         PriorityMaterials()
-                        ReportsHeader(mode = selectedMode)
+                        ReportsHeader(mode = selectedMode, filteredCount = filteredInvoices.size)
                     }
-                    item { ReportCard(mode = selectedMode, rows = demoRows) }
+                    item { ReportCard(mode = selectedMode, rows = invoiceRows(filteredInvoices).ifEmpty { demoRows }) }
                     item {
                         Text(
                             text = "الإصدار الأول — محرك قراءة Excel الكامل قيد الإكمال داخل النسخة Native.",
@@ -125,9 +171,19 @@ private fun WarehouseApp() {
                             fontSize = 12.sp,
                         )
                     }
+                    }
                 }
             }
         }
+    }
+}
+
+private fun invoiceRows(invoices: List<Invoice>): List<ReportRow> = invoices.take(60).map { invoice ->
+    when (invoice.movementKind()) {
+        MovementKind.TRANSFER_INPUT -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, invoice.quantity.toInt(), 0, 0)
+        MovementKind.TRANSFER_OUTPUT -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, invoice.quantity.toInt(), 0)
+        MovementKind.SALE -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, 0, invoice.quantity.toInt())
+        MovementKind.UNKNOWN -> ReportRow(invoice.date.toString(), invoice.itemName, invoice.unit, 0, 0, 0)
     }
 }
 
@@ -147,7 +203,7 @@ private fun Header() {
 }
 
 @Composable
-private fun ActionRow(onPickFile: () -> Unit, onExport: () -> Unit) {
+private fun ActionRow(onPickFile: () -> Unit, onExport: () -> Unit, isReading: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -160,7 +216,7 @@ private fun ActionRow(onPickFile: () -> Unit, onExport: () -> Unit) {
         ) {
             androidx.compose.material3.Icon(Icons.Default.FolderOpen, contentDescription = null)
             Spacer(Modifier.width(6.dp))
-            Text("اختيار ملف Excel", fontWeight = FontWeight.Bold)
+            Text(if (isReading) "جارٍ قراءة Excel..." else "اختيار ملف Excel", fontWeight = FontWeight.Bold)
         }
         OutlinedButton(
             onClick = onExport,
@@ -196,7 +252,14 @@ private fun FileCard(fileName: String, hasFile: Boolean) {
 }
 
 @Composable
-private fun Filters(selectedMode: String, onModeChange: (String) -> Unit) {
+private fun Filters(
+    selectedMode: String,
+    onModeChange: (String) -> Unit,
+    salespeople: List<String>,
+    selectedSalesperson: String?,
+    onSalespersonChange: (String?) -> Unit,
+) {
+    var salespersonMenuExpanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -220,8 +283,16 @@ private fun Filters(selectedMode: String, onModeChange: (String) -> Unit) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                Text("فلتر المندوبين — كل المندوبين", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End)
+            Box {
+                OutlinedButton(onClick = { salespersonMenuExpanded = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Text("فلتر المندوبين — ${selectedSalesperson ?: "كل المندوبين"}", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.End)
+                }
+                DropdownMenu(expanded = salespersonMenuExpanded, onDismissRequest = { salespersonMenuExpanded = false }) {
+                    DropdownMenuItem(text = { Text("كل المندوبين") }, onClick = { onSalespersonChange(null); salespersonMenuExpanded = false })
+                    salespeople.forEach { person ->
+                        DropdownMenuItem(text = { Text(person) }, onClick = { onSalespersonChange(person); salespersonMenuExpanded = false })
+                    }
+                }
             }
         }
     }
@@ -256,9 +327,9 @@ private fun PriorityMaterials() {
 }
 
 @Composable
-private fun ReportsHeader(mode: String) {
+private fun ReportsHeader(mode: String, filteredCount: Int) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("$mode مبيعات", color = Navy, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text("$mode مبيعات — $filteredCount حركة", color = Navy, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         TextButton(onClick = { }) {
             androidx.compose.material3.Icon(Icons.Default.FileDownload, contentDescription = null)
             Text("تصدير Excel")
