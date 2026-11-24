@@ -506,20 +506,28 @@ private fun ReportCard(mode: String, salespersonName: String, rows: List<ReportR
                 Text("مبيعات $mode", color = Color(0xFF687782), fontSize = 15.sp)
                 Text("2026-11-23 إلى 2026-11-23", color = Color(0xFF687782), fontSize = 14.sp)
             }
-            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                SummaryCell("الإدخالات", "32")
-                SummaryCell("الإخراجات", "8")
-                SummaryCell("المبيع", "24", Green)
+            if (mode == "مفرق") {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    SummaryCell("المبيع", rows.sumOf { it.sale }.toString(), Green)
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    SummaryCell("الإدخالات", rows.sumOf { it.loading }.toString())
+                    SummaryCell("الإخراجات", rows.sumOf { it.returned }.toString())
+                    SummaryCell("المبيع", rows.sumOf { it.sale }.toString(), Green)
+                }
             }
             HorizontalDivider(color = Border)
             Row(Modifier.fillMaxWidth().background(Teal).padding(vertical = 14.dp)) {
-                listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع").forEach { heading ->
+                val headings = if (mode == "مفرق") listOf("التاريخ", "المادة", "الوحدة", "مبيع") else listOf("التاريخ", "المادة", "الوحدة", "تحميل", "مرتجع", "مبيع")
+                headings.forEach { heading ->
                     Text(heading, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 }
             }
             rows.forEach { row ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString()).forEach { value ->
+                    val values = if (mode == "مفرق") listOf(row.date, row.material, row.unit, row.sale.toString()) else listOf(row.date, row.material, row.unit, row.loading.toString(), row.returned.toString(), row.sale.toString())
+                    values.forEach { value ->
                         Text(value, color = Navy, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                     }
                 }
